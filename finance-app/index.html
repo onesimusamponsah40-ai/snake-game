@@ -1,0 +1,806 @@
+<title>Ledgerline</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;600;700&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: sticky header with tabs over one working column; each tab is a stack of panels. */
+:root {
+  --bg: #f3f4f7;
+  --surface: #ffffff;
+  --surface-2: #e9ecf3;
+  --line: #d6dbe6;
+  --fg: #171b26;
+  --muted: #5b6377;
+  --accent: #2443c4;
+  --accent-soft: #e2e7fb;
+  --good: #137a4b;
+  --good-soft: #dcf2e6;
+  --warn: #9a6200;
+  --warn-soft: #fbefd6;
+  --bad: #b3261e;
+  --bad-soft: #fbe2df;
+  --font-display: "Familjen Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-data: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #10131b; --surface: #181c27; --surface-2: #222838; --line: #2f3648;
+    --fg: #e8ebf3; --muted: #9aa3b8; --accent: #8ea2ff; --accent-soft: #252e52;
+    --good: #5fd39a; --good-soft: #16352a; --warn: #f0b85a; --warn-soft: #3a2d14;
+    --bad: #ff8a80; --bad-soft: #3f1c1a; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #10131b; --surface: #181c27; --surface-2: #222838; --line: #2f3648;
+  --fg: #e8ebf3; --muted: #9aa3b8; --accent: #8ea2ff; --accent-soft: #252e52;
+  --good: #5fd39a; --good-soft: #16352a; --warn: #f0b85a; --warn-soft: #3a2d14;
+  --bad: #ff8a80; --bad-soft: #3f1c1a; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.5; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; margin: 0; letter-spacing: -0.01em; }
+h2 { font-size: 1.25rem; }
+h3 { font-size: 1rem; }
+.num, td.n, .mono { font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+.wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+header.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--surface); border-bottom: 1px solid var(--line); }
+header.top .wrap { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; padding-block: 12px; }
+.brand { display: flex; align-items: baseline; gap: 10px; }
+.brand h1 { font-size: 1.35rem; }
+.brand h1 span { color: var(--accent); }
+.save-state { font-size: 12px; color: var(--muted); }
+nav.tabs { display: flex; gap: 4px; margin-left: auto; flex-wrap: wrap; }
+nav.tabs button { font: 600 14px var(--font-body); background: none; border: 0; color: var(--muted); padding: 8px 12px; border-radius: 8px; cursor: pointer; }
+nav.tabs button[aria-selected="true"] { color: var(--accent); background: var(--accent-soft); }
+nav.tabs button:hover { color: var(--fg); }
+main { padding-block: 24px 64px; display: grid; gap: 20px; }
+section.view { display: grid; gap: 20px; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 20px; min-width: 0; }
+.panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.sub { color: var(--muted); font-size: 13px; margin: 2px 0 0; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); gap: 12px; }
+.kpi { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+.kpi .label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.kpi .value { font: 500 1.6rem var(--font-data); font-variant-numeric: tabular-nums; margin-top: 4px; }
+.kpi .note { font-size: 13px; color: var(--muted); }
+.pos { color: var(--good); } .neg { color: var(--bad); }
+.grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; }
+.banner { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; background: var(--warn-soft); color: var(--fg); border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px; font-size: 14px; }
+.btn { font: 600 14px var(--font-body); border-radius: 8px; padding: 8px 14px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); cursor: pointer; }
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.btn.small { padding: 4px 10px; font-size: 13px; }
+.btn.ghost { background: none; border-color: transparent; color: var(--muted); }
+.btn.ghost:hover { color: var(--bad); }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, tr[tabindex]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.table-scroll { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th { text-align: left; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td { padding: 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th.n, td.n { text-align: right; }
+tbody tr.clickable { cursor: pointer; }
+tbody tr.clickable:hover, tbody tr.selected { background: var(--surface-2); }
+.ticker { font: 600 14px var(--font-data); }
+.pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+.pill.good { background: var(--good-soft); color: var(--good); }
+.pill.warn { background: var(--warn-soft); color: var(--warn); }
+.pill.bad { background: var(--bad-soft); color: var(--bad); }
+.pill.neutral { background: var(--surface-2); color: var(--muted); }
+.scorebar { display: inline-block; width: 64px; height: 6px; border-radius: 3px; background: var(--surface-2); vertical-align: middle; margin-right: 8px; overflow: hidden; }
+.scorebar i { display: block; height: 100%; }
+form.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+label.f { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
+label.f span.hint { font-size: 11px; }
+input, select, textarea { font: 14px var(--font-body); color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; width: 100%; min-width: 0; }
+input[type="number"] { font-family: var(--font-data); }
+.form-actions { display: flex; gap: 8px; align-items: end; flex-wrap: wrap; }
+.factors { display: grid; gap: 0; }
+.factor { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.factor:last-child { border-bottom: 0; }
+.factor .fname { font-weight: 600; }
+.factor .fnote { grid-column: 1 / -1; font-size: 13px; color: var(--muted); }
+.pts { font: 500 13px var(--font-data); }
+.alloc { display: flex; height: 14px; border-radius: 7px; overflow: hidden; background: var(--surface-2); }
+.alloc i { display: block; height: 100%; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; font-size: 13px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend b { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+.catrow { display: grid; grid-template-columns: minmax(110px, 1fr) 2fr auto; gap: 12px; align-items: center; padding: 8px 0; }
+.track { height: 10px; border-radius: 5px; background: var(--surface-2); position: relative; overflow: hidden; }
+.track i { position: absolute; inset: 0 auto 0 0; border-radius: 5px; }
+.rule { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.rule div { background: var(--surface-2); border-radius: 10px; padding: 12px; }
+.rule .k { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.rule .v { font: 500 1.2rem var(--font-data); }
+.rule .t { font-size: 12px; color: var(--muted); }
+.empty { color: var(--muted); font-size: 14px; padding: 12px 0; }
+.chat { display: grid; grid-template-rows: 1fr auto; min-height: 520px; }
+.msgs { display: flex; flex-direction: column; gap: 14px; overflow-y: auto; max-height: 60vh; padding-bottom: 8px; }
+.msg { max-width: 760px; padding: 12px 14px; border-radius: 12px; font-size: 15px; min-width: 0; overflow-wrap: anywhere; }
+.msg.user { align-self: flex-end; background: var(--accent); color: var(--surface); }
+.msg.ai { align-self: flex-start; background: var(--surface-2); }
+.msg.ai p { margin: 0 0 8px; } .msg.ai p:last-child { margin: 0; }
+.msg.ai ul { margin: 0 0 8px; padding-left: 20px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { font: 13px var(--font-body); border: 1px solid var(--line); background: var(--surface); color: var(--fg); padding: 6px 12px; border-radius: 999px; cursor: pointer; }
+.chip:hover { border-color: var(--accent); color: var(--accent); }
+.composer { display: flex; gap: 8px; margin-top: 12px; }
+.composer textarea { resize: vertical; min-height: 46px; }
+.disclaimer { font-size: 12px; color: var(--muted); }
+.detail-head { display: flex; justify-content: space-between; align-items: start; gap: 12px; flex-wrap: wrap; }
+.bigscore { font: 500 2rem var(--font-data); }
+@media (max-width: 560px) {
+  .rule { grid-template-columns: 1fr; }
+  .catrow { grid-template-columns: 1fr auto; }
+  .catrow .track { grid-column: 1 / -1; grid-row: 2; }
+  nav.tabs { margin-left: 0; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .track i, .scorebar i { transition: width .3s ease; }
+}
+</style>
+
+<header class="top">
+  <div class="wrap">
+    <div class="brand"><h1>Ledger<span>line</span></h1><span class="save-state" id="saveState">Loading…</span></div>
+    <nav class="tabs" role="tablist" aria-label="Sections">
+      <button role="tab" id="tab-overview" data-view="overview" aria-selected="true">Overview</button>
+      <button role="tab" id="tab-stocks" data-view="stocks" aria-selected="false">Stocks</button>
+      <button role="tab" id="tab-budget" data-view="budget" aria-selected="false">Budget</button>
+      <button role="tab" id="tab-ai" data-view="ai" aria-selected="false">Ask AI</button>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="banner" id="exampleBanner" hidden>
+    <span>You're looking at <strong>example data</strong>. These are not your numbers. Edit them, or clear them to start fresh.</span>
+    <button class="btn small" id="clearExamples">Clear examples</button>
+  </div>
+
+  <!-- OVERVIEW -->
+  <section class="view" id="view-overview">
+    <div class="kpis" id="kpis"></div>
+    <div class="grid-2">
+      <div class="panel">
+        <div class="panel-head"><div><h2>Stock verdicts</h2><p class="sub">Best score first</p></div><button class="btn small" data-goto="stocks">Open stocks</button></div>
+        <div id="ovStocks"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><div><h2>This month's spending</h2><p class="sub" id="ovMonthLabel"></p></div><button class="btn small" data-goto="budget">Open budget</button></div>
+        <div id="ovBudget"></div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h2>Allocation</h2></div>
+      <div id="alloc"></div>
+    </div>
+  </section>
+
+  <!-- STOCKS -->
+  <section class="view" id="view-stocks" hidden>
+    <div class="panel">
+      <div class="panel-head">
+        <div><h2>Holdings &amp; watchlist</h2><p class="sub">Set shares to 0 to watch a stock you don't own yet. Click a row for the breakdown.</p></div>
+        <button class="btn primary" id="newStock">Add stock</button>
+      </div>
+      <div class="table-scroll"><table>
+        <thead><tr><th>Ticker</th><th class="n">Shares</th><th class="n">Avg cost</th><th class="n">Price</th><th class="n">Value</th><th class="n">Gain</th><th>Score</th><th>Verdict</th></tr></thead>
+        <tbody id="stockRows"></tbody>
+      </table></div>
+    </div>
+    <div class="grid-2">
+      <div class="panel" id="stockDetail"></div>
+      <div class="panel" id="stockFormPanel">
+        <div class="panel-head"><h2 id="stockFormTitle">Add a stock</h2></div>
+        <form class="grid" id="stockForm" autocomplete="off">
+          <label class="f">Ticker<input id="sf-ticker" name="ticker" required maxlength="10" placeholder="AAPL"></label>
+          <label class="f">Company<input id="sf-name" name="name" maxlength="60" placeholder="Apple Inc."></label>
+          <label class="f">Shares<input id="sf-shares" name="shares" type="number" step="any" min="0" value="0"></label>
+          <label class="f">Avg cost / share<input id="sf-cost" name="cost" type="number" step="any" min="0"></label>
+          <label class="f">Current price<input id="sf-price" name="price" type="number" step="any" min="0" required></label>
+          <label class="f">P/E ratio<input id="sf-pe" name="pe" type="number" step="any"><span class="hint">Negative if losing money</span></label>
+          <label class="f">EPS growth %<input id="sf-epsg" name="epsGrowth" type="number" step="any"><span class="hint">Expected yearly</span></label>
+          <label class="f">Revenue growth %<input id="sf-revg" name="revGrowth" type="number" step="any"></label>
+          <label class="f">Net margin %<input id="sf-margin" name="margin" type="number" step="any"></label>
+          <label class="f">Debt / equity<input id="sf-de" name="debtEq" type="number" step="any" min="0"></label>
+          <label class="f">Dividend yield %<input id="sf-div" name="divYield" type="number" step="any" min="0"></label>
+          <label class="f">52-week low<input id="sf-low" name="low52" type="number" step="any" min="0"></label>
+          <label class="f">52-week high<input id="sf-high" name="high52" type="number" step="any" min="0"></label>
+          <div class="form-actions"><button class="btn primary" type="submit" id="sf-submit">Save stock</button><button class="btn" type="button" id="sf-cancel">Reset</button></div>
+        </form>
+        <p class="disclaimer">Find these numbers on any quote page (Yahoo Finance, Google Finance, your broker). Blank fields are skipped in the score.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- BUDGET -->
+  <section class="view" id="view-budget" hidden>
+    <div class="kpis" id="budgetKpis"></div>
+    <div class="grid-2">
+      <div class="panel">
+        <div class="panel-head">
+          <div><h2>Spending vs. limits</h2><p class="sub">Per category, for the month you pick</p></div>
+          <input type="month" id="monthPick" style="width:auto">
+        </div>
+        <div id="catBars"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><div><h2>50 / 30 / 20 check</h2><p class="sub">Needs, wants, and saving as a share of take-home pay, from your plan</p></div></div>
+        <div id="ruleBox"></div>
+        <form class="grid" id="settingsForm" style="margin-top:16px">
+          <label class="f">Monthly take-home pay<input id="set-income" type="number" step="any" min="0"></label>
+          <label class="f">Emergency fund balance<input id="set-efund" type="number" step="any" min="0"></label>
+          <div class="form-actions"><button class="btn" type="submit">Update</button></div>
+        </form>
+      </div>
+    </div>
+    <div class="grid-2">
+      <div class="panel">
+        <div class="panel-head"><h2>Transactions</h2><span class="sub" id="txCount"></span></div>
+        <form class="grid" id="txForm" autocomplete="off">
+          <label class="f">Date<input id="tx-date" type="date" required></label>
+          <label class="f">Description<input id="tx-desc" maxlength="60" required placeholder="Groceries"></label>
+          <label class="f">Category<select id="tx-cat"></select></label>
+          <label class="f">Amount<input id="tx-amt" type="number" step="any" min="0" required></label>
+          <div class="form-actions"><button class="btn primary" type="submit">Add</button></div>
+        </form>
+        <div class="table-scroll" style="margin-top:14px"><table>
+          <thead><tr><th>Date</th><th>Description</th><th>Category</th><th class="n">Amount</th><th></th></tr></thead>
+          <tbody id="txRows"></tbody>
+        </table></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h2>Categories</h2></div>
+        <form class="grid" id="catForm" autocomplete="off">
+          <label class="f">Name<input id="cat-name" maxlength="30" required placeholder="Dining out"></label>
+          <label class="f">Monthly limit<input id="cat-limit" type="number" step="any" min="0" required></label>
+          <label class="f">Type<select id="cat-kind"><option value="need">Need</option><option value="want">Want</option><option value="save">Saving / investing</option></select></label>
+          <div class="form-actions"><button class="btn primary" type="submit">Add</button></div>
+        </form>
+        <div class="table-scroll" style="margin-top:14px"><table>
+          <thead><tr><th>Category</th><th>Type</th><th class="n">Limit</th><th></th></tr></thead>
+          <tbody id="catRows"></tbody>
+        </table></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- AI -->
+  <section class="view" id="view-ai" hidden>
+    <div class="panel chat">
+      <div class="msgs" id="msgs" aria-live="polite">
+        <div class="msg ai" id="aiIntro"><p>Ask me about your stocks or your budget. I can see the numbers on this page, the scores, and your spending.</p></div>
+        <div class="chips" id="chips">
+          <button class="chip">Which of my stocks look best to buy more of?</button>
+          <button class="chip">Which stock should I worry about, and why?</button>
+          <button class="chip">Where am I overspending this month?</button>
+          <button class="chip">How much can I safely invest each month?</button>
+          <button class="chip">Is my portfolio too concentrated?</button>
+        </div>
+      </div>
+      <div>
+        <form class="composer" id="chatForm">
+          <textarea id="chatInput" rows="2" placeholder="e.g. Should I sell TSLA and buy more MSFT?" aria-label="Your question"></textarea>
+          <button class="btn primary" type="submit" id="chatSend">Ask</button>
+        </form>
+        <p class="disclaimer" id="aiNote">Answers are educational, not financial advice. The AI uses the numbers you entered, which may be out of date.</p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+(() => {
+  "use strict";
+  // ---------- helpers ----------
+  const $ = (s, r = document) => r.querySelector(s);
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const num = (v) => (v === "" || v === null || v === undefined || isNaN(+v) ? null : +v);
+  const money = (v, d = 0) => (v === null || isNaN(v) ? "—" : (v < 0 ? "-$" : "$") + Math.abs(v).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d }));
+  const pct = (v, d = 1) => (v === null || isNaN(v) || !isFinite(v) ? "—" : (v > 0 ? "+" : "") + v.toFixed(d) + "%");
+  const uid = () => Math.random().toString(36).slice(2, 10);
+  const today = () => new Date().toISOString().slice(0, 10);
+  const thisMonth = () => today().slice(0, 7);
+  const PALETTE = ["var(--accent)", "#2f9e8f", "#d07a2b", "#8a5cc7", "#c4475f", "#5a8f2e", "#3b82c4", "#a3863a"];
+
+  // ---------- example data (shown only until the viewer saves their own) ----------
+  function exampleState() {
+    const m = thisMonth();
+    return {
+      example: true,
+      stocks: [
+        { id: uid(), ticker: "MSFT", name: "Microsoft (example)", shares: 12, cost: 310, price: 415, pe: 34, epsGrowth: 14, revGrowth: 15, margin: 36, debtEq: 0.3, divYield: 0.8, low52: 345, high52: 468 },
+        { id: uid(), ticker: "KO", name: "Coca-Cola (example)", shares: 30, cost: 58, price: 62, pe: 24, epsGrowth: 6, revGrowth: 3, margin: 23, debtEq: 1.6, divYield: 3.1, low52: 57, high52: 73 },
+        { id: uid(), ticker: "TSLA", name: "Tesla (example)", shares: 8, cost: 260, price: 220, pe: 70, epsGrowth: 10, revGrowth: 2, margin: 7, debtEq: 0.2, divYield: 0, low52: 140, high52: 290 },
+        { id: uid(), ticker: "XYZ", name: "Speculative Co. (example)", shares: 0, cost: null, price: 9.4, pe: -12, epsGrowth: -20, revGrowth: -6, margin: -14, debtEq: 3.4, divYield: 0, low52: 6, high52: 21 },
+      ],
+      settings: { income: 5200, efund: 6500 },
+      categories: [
+        { id: "c1", name: "Rent", kind: "need", limit: 1600 },
+        { id: "c2", name: "Groceries", kind: "need", limit: 450 },
+        { id: "c3", name: "Utilities & phone", kind: "need", limit: 220 },
+        { id: "c4", name: "Transport", kind: "need", limit: 250 },
+        { id: "c5", name: "Dining out", kind: "want", limit: 250 },
+        { id: "c6", name: "Shopping & fun", kind: "want", limit: 300 },
+        { id: "c7", name: "Investing", kind: "save", limit: 700 },
+        { id: "c8", name: "Emergency fund", kind: "save", limit: 300 },
+      ],
+      txns: [
+        { id: uid(), date: m + "-01", desc: "Rent", cat: "c1", amount: 1600 },
+        { id: uid(), date: m + "-03", desc: "Supermarket", cat: "c2", amount: 142.6 },
+        { id: uid(), date: m + "-05", desc: "Brokerage deposit", cat: "c7", amount: 700 },
+        { id: uid(), date: m + "-06", desc: "Electric bill", cat: "c3", amount: 96 },
+        { id: uid(), date: m + "-08", desc: "Restaurant", cat: "c5", amount: 88.4 },
+        { id: uid(), date: m + "-10", desc: "Gas", cat: "c4", amount: 54 },
+        { id: uid(), date: m + "-11", desc: "Sneakers", cat: "c6", amount: 129 },
+        { id: uid(), date: m + "-12", desc: "Takeout", cat: "c5", amount: 61.2 },
+        { id: uid(), date: m + "-14", desc: "Supermarket", cat: "c2", amount: 118.3 },
+        { id: uid(), date: m + "-15", desc: "Concert tickets", cat: "c6", amount: 210 },
+        { id: uid(), date: m + "-16", desc: "Brunch", cat: "c5", amount: 120 },
+      ],
+    };
+  }
+  function blankState() {
+    const s = exampleState();
+    return { example: false, stocks: [], settings: { income: 0, efund: 0 }, categories: s.categories, txns: [] };
+  }
+
+  let state = exampleState();
+  let selectedId = state.stocks[0]?.id ?? null;
+  let editingId = null;
+  let viewMonth = thisMonth();
+
+  // ---------- storage: private db doc per person, else this browser ----------
+  const LS_KEY = "ledgerline-state-v1";
+  let store = { kind: "none", ref: null };
+  let saveTimer = null, saving = false, dirty = false;
+
+  function setSaveState(t) { $("#saveState").textContent = t; }
+
+  async function initStorage() {
+    let loaded = null;
+    try {
+      const [db, user] = await Promise.all([window.claude?.use?.("db"), window.claude?.use?.("user")]);
+      const id = db && user ? await user.id() : null;
+      if (db && id) {
+        const ref = db.collection("data/users/" + id).doc("ledger");
+        const snap = await ref.get();
+        store = { kind: "db", ref };
+        if (snap.exists) loaded = snap.data();
+      }
+    } catch (e) { store = { kind: "none", ref: null }; }
+    if (store.kind !== "db") {
+      try { localStorage.setItem(LS_KEY + "-probe", "1"); store = { kind: "local", ref: null }; } catch (e) {}
+      if (store.kind === "local") {
+        try { const raw = localStorage.getItem(LS_KEY); if (raw) loaded = JSON.parse(raw); } catch (e) {}
+      }
+    }
+    if (loaded && Array.isArray(loaded.stocks)) {
+      state = { example: false, stocks: loaded.stocks, settings: loaded.settings || { income: 0, efund: 0 }, categories: loaded.categories || [], txns: loaded.txns || [] };
+      selectedId = state.stocks[0]?.id ?? null;
+    }
+    setSaveState(state.example ? "Example data, not saved" : savedLabel());
+    renderAll();
+  }
+  function savedLabel() {
+    return store.kind === "db" ? "Saved to your account" : store.kind === "local" ? "Saved in this browser" : "Not saved (storage unavailable)";
+  }
+  function commit() {
+    state.example = false;
+    renderAll();
+    dirty = true;
+    setSaveState("Saving…");
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(flush, 700);
+  }
+  async function flush() {
+    if (saving) { saveTimer = setTimeout(flush, 400); return; }
+    if (!dirty) return;
+    dirty = false; saving = true;
+    const data = { stocks: state.stocks, settings: state.settings, categories: state.categories, txns: state.txns, updatedAt: new Date().toISOString() };
+    try {
+      if (store.kind === "db") await store.ref.set(data);
+      else if (store.kind === "local") localStorage.setItem(LS_KEY, JSON.stringify(data));
+      setSaveState(savedLabel());
+    } catch (e) {
+      setSaveState("Couldn't save: " + (e?.message || "unknown error"));
+    } finally { saving = false; }
+  }
+
+  // ---------- stock scoring ----------
+  // Each factor earns points; blank metrics are skipped. Max possible = 9.
+  function scoreStock(s) {
+    const f = [];
+    const pe = num(s.pe), eg = num(s.epsGrowth), rg = num(s.revGrowth), m = num(s.margin), de = num(s.debtEq), dy = num(s.divYield);
+    if (pe !== null) {
+      if (pe <= 0) f.push({ name: "Valuation", value: "P/E " + pe, pts: -2, max: 2, note: "Negative P/E means the company is losing money right now." });
+      else if (eg !== null && eg > 0) {
+        const peg = pe / (eg + (dy || 0)); // dividend-adjusted PEG
+        const pts = peg < 1 ? 2 : peg <= 2 ? 1 : peg <= 3 ? 0 : -2;
+        f.push({ name: dy ? "Valuation (PEG, dividend-adj.)" : "Valuation (PEG)", value: peg.toFixed(2), pts, max: 2, note: peg < 1 ? "Cheap relative to its earnings growth." : peg <= 2 ? "Fairly priced for its growth." : peg <= 3 ? "Getting expensive for its growth." : "Priced far ahead of its growth. A lot has to go right." });
+      } else {
+        const pts = pe < 15 ? 0 : -2;
+        f.push({ name: "Valuation", value: "P/E " + pe, pts, max: 2, note: pe < 15 ? "Low P/E, but earnings aren't growing." : "Expensive with no earnings growth to justify it." });
+      }
+    }
+    if (eg !== null) f.push({ name: "Earnings growth", value: pct(eg, 0), pts: eg >= 20 ? 2 : eg >= 8 ? 1 : eg >= 0 ? 0 : -2, max: 2, note: eg >= 20 ? "Strong profit growth." : eg >= 8 ? "Healthy profit growth." : eg >= 0 ? "Slow profit growth." : "Profits are shrinking." });
+    if (rg !== null) f.push({ name: "Revenue growth", value: pct(rg, 0), pts: rg >= 15 ? 1 : rg >= 0 ? 0 : -1, max: 1, note: rg >= 15 ? "Sales are growing fast." : rg >= 0 ? "Sales are steady." : "Sales are falling." });
+    if (m !== null) f.push({ name: "Profit margin", value: m + "%", pts: m >= 20 ? 2 : m >= 10 ? 1 : m >= 0 ? 0 : -2, max: 2, note: m >= 20 ? "Keeps a large share of each sale as profit." : m >= 10 ? "Decent margins." : m >= 0 ? "Thin margins leave little room for error." : "Loses money on its sales." });
+    if (de !== null) f.push({ name: "Debt / equity", value: de.toFixed(2), pts: de <= 0.5 ? 1 : de <= 1.5 ? 0 : de <= 3 ? -1 : -2, max: 1, note: de <= 0.5 ? "Low debt, strong balance sheet." : de <= 1.5 ? "Moderate debt." : de <= 3 ? "Heavy debt. Watch interest costs." : "Very high debt. Risky if business slows." });
+    if (dy !== null) f.push({ name: "Dividend", value: dy + "%", pts: dy >= 2 && dy <= 8 ? 1 : dy > 8 ? -1 : 0, max: 1, note: dy > 8 ? "Unusually high yield. Check the payout is sustainable." : dy >= 2 ? "Pays you a solid income while you hold." : dy > 0 ? "Small dividend." : "No dividend. Returns rely on price growth." });
+
+    const total = f.reduce((a, x) => a + x.pts, 0);
+    const max = f.reduce((a, x) => a + x.max, 0);
+    const ratio = max ? total / max : 0;
+    let verdict;
+    if (!f.length) verdict = { label: "Need data", cls: "neutral" };
+    else if (ratio >= 0.5) verdict = { label: "Buy candidate", cls: "good" };
+    else if (ratio >= 0) verdict = { label: "Hold / watch", cls: "warn" };
+    else verdict = { label: "Avoid for now", cls: "bad" };
+
+    const ctx = [];
+    const lo = num(s.low52), hi = num(s.high52), p = num(s.price);
+    if (lo !== null && hi !== null && p !== null && hi > lo) {
+      const pos = (p - lo) / (hi - lo);
+      ctx.push("Trading " + Math.round(pos * 100) + "% of the way up its 52-week range (" + money(lo, 2) + " – " + money(hi, 2) + "), " + pct(((p - hi) / hi) * 100) + " from the high.");
+    }
+    return { factors: f, total, max, ratio, verdict, ctx };
+  }
+
+  // ---------- portfolio math ----------
+  function portfolio() {
+    const rows = state.stocks.map((s) => {
+      const sh = num(s.shares) || 0, price = num(s.price) || 0, cost = num(s.cost);
+      const value = sh * price, basis = cost !== null ? sh * cost : null;
+      return { s, value, basis, gain: basis !== null ? value - basis : null, gainPct: basis ? ((value - basis) / basis) * 100 : null, score: scoreStock(s) };
+    });
+    const total = rows.reduce((a, r) => a + r.value, 0);
+    const basis = rows.reduce((a, r) => a + (r.basis ?? 0), 0);
+    rows.forEach((r) => (r.weight = total ? (r.value / total) * 100 : 0));
+    return { rows, total, basis, gain: total - basis };
+  }
+
+  // ---------- budget math ----------
+  function budget(month = viewMonth) {
+    const inc = num(state.settings.income) || 0;
+    const tx = state.txns.filter((t) => t.date?.startsWith(month));
+    const byCat = {};
+    tx.forEach((t) => (byCat[t.cat] = (byCat[t.cat] || 0) + (+t.amount || 0)));
+    const plan = { need: 0, want: 0, save: 0 }, actual = { need: 0, want: 0, save: 0 };
+    state.categories.forEach((c) => { plan[c.kind] += +c.limit || 0; actual[c.kind] += byCat[c.id] || 0; });
+    const spent = tx.reduce((a, t) => a + (+t.amount || 0), 0);
+    const efund = num(state.settings.efund) || 0;
+    return { inc, tx, byCat, plan, actual, spent, spending: actual.need + actual.want, left: inc - spent, savingsRate: inc ? (actual.save / inc) * 100 : null, efMonths: plan.need ? efund / plan.need : null, efund };
+  }
+
+  // ---------- rendering ----------
+  function kpi(label, value, note, cls = "") {
+    return `<div class="kpi"><div class="label">${esc(label)}</div><div class="value ${cls}">${value}</div><div class="note">${note}</div></div>`;
+  }
+  function scoreCell(sc) {
+    if (!sc.factors.length) return `<span class="sub">—</span>`;
+    const w = Math.max(4, Math.round(((sc.total + sc.max) / (2 * sc.max)) * 100));
+    const col = sc.verdict.cls === "good" ? "var(--good)" : sc.verdict.cls === "warn" ? "var(--warn)" : "var(--bad)";
+    return `<span class="scorebar"><i style="width:${w}%;background:${col}"></i></span><span class="num">${sc.total > 0 ? "+" : ""}${sc.total}/${sc.max}</span>`;
+  }
+
+  function renderOverview() {
+    const p = portfolio(), b = budget(thisMonth());
+    $("#kpis").innerHTML = [
+      kpi("Portfolio value", money(p.total), p.rows.filter((r) => r.value > 0).length + " positions"),
+      kpi("Total gain", money(p.gain), p.basis ? pct((p.gain / p.basis) * 100) + " on cost" : "Add avg cost to track", p.gain >= 0 ? "pos" : "neg"),
+      kpi("Left this month", money(b.left), "of " + money(b.inc) + " take-home", b.left >= 0 ? "pos" : "neg"),
+      kpi("Savings rate", b.savingsRate === null ? "—" : b.savingsRate.toFixed(0) + "%", "Target 20% or more", b.savingsRate !== null && b.savingsRate >= 20 ? "pos" : ""),
+      kpi("Emergency fund", b.efMonths === null ? "—" : b.efMonths.toFixed(1) + " mo", "of essential costs; aim for 3–6", b.efMonths !== null && b.efMonths >= 3 ? "pos" : b.efMonths !== null ? "neg" : ""),
+    ].join("");
+
+    const sorted = [...p.rows].sort((a, c) => c.score.ratio - a.score.ratio);
+    $("#ovStocks").innerHTML = sorted.length
+      ? `<div class="factors">${sorted.map((r) => `<div class="factor"><span><span class="ticker">${esc(r.s.ticker)}</span> <span class="sub">${esc(r.s.name || "")}</span></span><span class="pill ${r.score.verdict.cls}">${r.score.verdict.label}</span></div>`).join("")}</div>`
+      : `<p class="empty">No stocks yet. Add one in the Stocks tab.</p>`;
+
+    $("#ovMonthLabel").textContent = new Date(thisMonth() + "-02").toLocaleString("en-US", { month: "long", year: "numeric" });
+    $("#ovBudget").innerHTML = catBarsHTML(b, 5);
+
+    const held = p.rows.filter((r) => r.value > 0).sort((a, c) => c.value - a.value);
+    $("#alloc").innerHTML = held.length
+      ? `<div class="alloc">${held.map((r, i) => `<i style="width:${r.weight}%;background:${PALETTE[i % PALETTE.length]}" title="${esc(r.s.ticker)}"></i>`).join("")}</div>
+         <div class="legend">${held.map((r, i) => `<span><b style="background:${PALETTE[i % PALETTE.length]}"></b><span class="ticker">${esc(r.s.ticker)}</span> <span class="num">${r.weight.toFixed(1)}%</span>${r.weight > 25 ? ` <span class="pill warn">Concentrated</span>` : ""}</span>`).join("")}</div>`
+      : `<p class="empty">Allocation appears once you own shares.</p>`;
+  }
+
+  function catBarsHTML(b, limit = Infinity) {
+    const cats = state.categories.filter((c) => c.kind !== "save" || b.byCat[c.id]).map((c) => ({ c, spent: b.byCat[c.id] || 0 }));
+    cats.sort((a, d) => d.spent / (d.c.limit || 1) - a.spent / (a.c.limit || 1));
+    if (!cats.length) return `<p class="empty">No categories yet.</p>`;
+    return cats.slice(0, limit).map(({ c, spent }) => {
+      const lim = +c.limit || 0, r = lim ? spent / lim : spent > 0 ? 2 : 0;
+      const col = c.kind === "save" ? "var(--good)" : r > 1 ? "var(--bad)" : r > 0.85 ? "var(--warn)" : "var(--accent)";
+      return `<div class="catrow"><span>${esc(c.name)}</span><div class="track"><i style="width:${Math.min(100, r * 100)}%;background:${col}"></i></div><span class="num" style="font-size:13px">${money(spent)} / ${money(lim)}${r > 1 && c.kind !== "save" ? ` <span class="pill bad">Over</span>` : ""}</span></div>`;
+    }).join("");
+  }
+
+  function renderStocks() {
+    const p = portfolio();
+    $("#stockRows").innerHTML = p.rows.length
+      ? p.rows.map((r) => `<tr class="clickable ${r.s.id === selectedId ? "selected" : ""}" data-id="${r.s.id}" tabindex="0">
+          <td><span class="ticker">${esc(r.s.ticker)}</span><br><span class="sub">${esc(r.s.name || "")}</span></td>
+          <td class="n">${num(r.s.shares) ?? 0}</td><td class="n">${money(num(r.s.cost), 2)}</td><td class="n">${money(num(r.s.price), 2)}</td>
+          <td class="n">${r.value ? money(r.value) : "watch"}</td>
+          <td class="n ${r.gain === null ? "" : r.gain >= 0 ? "pos" : "neg"}">${r.gainPct === null ? "—" : pct(r.gainPct)}</td>
+          <td>${scoreCell(r.score)}</td><td><span class="pill ${r.score.verdict.cls}">${r.score.verdict.label}</span></td></tr>`).join("")
+      : `<tr><td colspan="8" class="empty">No stocks yet. Use the form below to add your first one.</td></tr>`;
+    renderDetail(p);
+  }
+
+  function renderDetail(p) {
+    const r = p.rows.find((x) => x.s.id === selectedId);
+    const el = $("#stockDetail");
+    if (!r) { el.innerHTML = `<h2>Stock breakdown</h2><p class="empty">Pick a stock in the table to see why it scored the way it did.</p>`; return; }
+    const sc = r.score;
+    el.innerHTML = `
+      <div class="detail-head">
+        <div><h2><span class="ticker" style="font-size:1.25rem">${esc(r.s.ticker)}</span> ${esc(r.s.name || "")}</h2>
+        <p class="sub">${r.value ? money(r.value) + " held · " + r.weight.toFixed(1) + "% of portfolio" : "On your watchlist"}</p></div>
+        <div style="text-align:right"><div class="bigscore">${sc.factors.length ? (sc.total > 0 ? "+" : "") + sc.total + "/" + sc.max : "—"}</div><span class="pill ${sc.verdict.cls}">${sc.verdict.label}</span></div>
+      </div>
+      <div class="factors" style="margin-top:12px">${sc.factors.map((x) => `<div class="factor"><span class="fname">${x.name} <span class="sub mono">${esc(x.value)}</span></span><span class="pts ${x.pts > 0 ? "pos" : x.pts < 0 ? "neg" : ""}">${x.pts > 0 ? "+" : ""}${x.pts} / ${x.max}</span><span class="fnote">${x.note}</span></div>`).join("") || `<p class="empty">Add P/E, growth, margin or debt numbers to score this stock.</p>`}</div>
+      ${sc.ctx.map((c) => `<p class="sub">${esc(c)}</p>`).join("")}
+      ${r.weight > 25 ? `<p class="sub"><span class="pill warn">Concentrated</span> Over a quarter of your portfolio is in this one stock.</p>` : ""}
+      <div class="form-actions" style="margin-top:14px">
+        <button class="btn primary" data-act="ask" data-id="${r.s.id}">Ask AI about ${esc(r.s.ticker)}</button>
+        <button class="btn" data-act="edit" data-id="${r.s.id}">Edit</button>
+        <button class="btn ghost" data-act="del" data-id="${r.s.id}" id="delStock">Remove</button>
+      </div>`;
+  }
+
+  function renderBudget() {
+    const b = budget();
+    $("#monthPick").value = viewMonth;
+    $("#budgetKpis").innerHTML = [
+      kpi("Take-home pay", money(b.inc), "per month"),
+      kpi("Spent", money(b.spending), "needs + wants this month"),
+      kpi("Saved & invested", money(b.actual.save), b.savingsRate === null ? "Set your pay below" : b.savingsRate.toFixed(0) + "% of pay", b.actual.save > 0 ? "pos" : ""),
+      kpi("Left over", money(b.left), b.left >= 0 ? "Unassigned money" : "You spent more than you earned", b.left >= 0 ? "pos" : "neg"),
+    ].join("");
+    $("#catBars").innerHTML = catBarsHTML(b);
+    const inc = b.inc || 1;
+    const cell = (k, label, target) => {
+      const v = (b.plan[k] / inc) * 100;
+      const ok = k === "save" ? v >= target : v <= target;
+      return `<div><div class="k">${label}</div><div class="v ${b.inc ? (ok ? "pos" : "neg") : ""}">${b.inc ? v.toFixed(0) + "%" : "—"}</div><div class="t">${money(b.plan[k])} planned · target ${k === "save" ? "≥" : "≤"}${target}%</div></div>`;
+    };
+    $("#ruleBox").innerHTML = `<div class="rule">${cell("need", "Needs", 50)}${cell("want", "Wants", 30)}${cell("save", "Saving", 20)}</div>`;
+    $("#set-income").value = state.settings.income ?? "";
+    $("#set-efund").value = state.settings.efund ?? "";
+
+    const catName = (id) => state.categories.find((c) => c.id === id)?.name || "Uncategorized";
+    const prevCat = $("#tx-cat").value;
+    $("#tx-cat").innerHTML = state.categories.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join("");
+    if (state.categories.some((c) => c.id === prevCat)) $("#tx-cat").value = prevCat;
+    if (!$("#tx-date").value) $("#tx-date").value = today();
+    const tx = [...b.tx].sort((a, c) => c.date.localeCompare(a.date));
+    $("#txCount").textContent = tx.length + " in " + new Date(viewMonth + "-02").toLocaleString("en-US", { month: "short", year: "numeric" });
+    $("#txRows").innerHTML = tx.length
+      ? tx.map((t) => `<tr><td class="mono">${esc(t.date.slice(5))}</td><td>${esc(t.desc)}</td><td>${esc(catName(t.cat))}</td><td class="n">${money(+t.amount, 2)}</td><td><button class="btn ghost small" data-deltx="${t.id}" aria-label="Delete">✕</button></td></tr>`).join("")
+      : `<tr><td colspan="5" class="empty">No transactions this month.</td></tr>`;
+    const kindLabel = { need: "Need", want: "Want", save: "Saving" };
+    $("#catRows").innerHTML = state.categories.map((c) => `<tr><td>${esc(c.name)}</td><td><span class="pill ${c.kind === "save" ? "good" : c.kind === "want" ? "warn" : "neutral"}">${kindLabel[c.kind]}</span></td><td class="n">${money(+c.limit)}</td><td><button class="btn ghost small" data-delcat="${c.id}" aria-label="Delete">✕</button></td></tr>`).join("");
+  }
+
+  function renderAll() {
+    $("#exampleBanner").hidden = !state.example;
+    renderOverview(); renderStocks(); renderBudget();
+  }
+
+  // ---------- tabs ----------
+  function showView(v) {
+    document.querySelectorAll("nav.tabs button").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.view === v)));
+    document.querySelectorAll("section.view").forEach((s) => (s.hidden = s.id !== "view-" + v));
+    try { localStorage.setItem("ledgerline-tab", v); } catch (e) {}
+    if (v === "ai") $("#chatInput").focus({ preventScroll: true });
+  }
+  document.querySelectorAll("nav.tabs button").forEach((b) => b.addEventListener("click", () => showView(b.dataset.view)));
+  document.addEventListener("click", (e) => { const g = e.target.closest("[data-goto]"); if (g) showView(g.dataset.goto); });
+  const hash = location.hash.slice(1);
+  let startTab = ["overview", "stocks", "budget", "ai"].includes(hash) ? hash : null;
+  if (!startTab) { try { startTab = localStorage.getItem("ledgerline-tab"); } catch (e) {} }
+  if (["overview", "stocks", "budget", "ai"].includes(startTab)) showView(startTab);
+
+  $("#clearExamples").addEventListener("click", () => { state = blankState(); selectedId = null; commit(); });
+
+  // ---------- stock interactions ----------
+  const FIELDS = { ticker: "sf-ticker", name: "sf-name", shares: "sf-shares", cost: "sf-cost", price: "sf-price", pe: "sf-pe", epsGrowth: "sf-epsg", revGrowth: "sf-revg", margin: "sf-margin", debtEq: "sf-de", divYield: "sf-div", low52: "sf-low", high52: "sf-high" };
+  function fillForm(s) {
+    editingId = s ? s.id : null;
+    for (const [k, id] of Object.entries(FIELDS)) $("#" + id).value = s ? (s[k] ?? "") : (k === "shares" ? 0 : "");
+    $("#stockFormTitle").textContent = s ? "Edit " + s.ticker : "Add a stock";
+    $("#sf-submit").textContent = s ? "Save changes" : "Save stock";
+  }
+  $("#stockForm").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const s = { id: editingId || uid() };
+    for (const [k, id] of Object.entries(FIELDS)) {
+      const v = $("#" + id).value.trim();
+      s[k] = k === "ticker" ? v.toUpperCase() : k === "name" ? v : num(v);
+    }
+    if (s.shares === null) s.shares = 0;
+    const i = state.stocks.findIndex((x) => x.id === s.id);
+    if (i >= 0) state.stocks[i] = s; else state.stocks.push(s);
+    selectedId = s.id;
+    fillForm(null);
+    commit();
+  });
+  $("#sf-cancel").addEventListener("click", () => fillForm(null));
+  $("#newStock").addEventListener("click", () => { fillForm(null); $("#sf-ticker").focus(); $("#stockFormPanel").scrollIntoView({ behavior: "smooth", block: "start" }); });
+  $("#stockRows").addEventListener("click", (e) => { const tr = e.target.closest("tr[data-id]"); if (tr) { selectedId = tr.dataset.id; renderStocks(); } });
+  $("#stockRows").addEventListener("keydown", (e) => { if (e.key === "Enter") { const tr = e.target.closest("tr[data-id]"); if (tr) { selectedId = tr.dataset.id; renderStocks(); } } });
+  let pendingDelete = null;
+  $("#stockDetail").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-act]"); if (!b) return;
+    const s = state.stocks.find((x) => x.id === b.dataset.id); if (!s) return;
+    if (b.dataset.act === "edit") { fillForm(s); $("#sf-price").focus(); }
+    if (b.dataset.act === "del") {
+      if (pendingDelete !== s.id) { pendingDelete = s.id; b.textContent = "Tap again to remove"; return; }
+      state.stocks = state.stocks.filter((x) => x.id !== s.id); selectedId = state.stocks[0]?.id ?? null; pendingDelete = null; commit();
+    }
+    if (b.dataset.act === "ask") { showView("ai"); ask(`Give me a buy / hold / sell style analysis of ${s.ticker} using my numbers. What are the main strengths and risks, and what should I check before buying more?`); }
+  });
+
+  // ---------- budget interactions ----------
+  $("#monthPick").addEventListener("change", (e) => { viewMonth = e.target.value || thisMonth(); renderBudget(); });
+  $("#settingsForm").addEventListener("submit", (e) => { e.preventDefault(); state.settings = { income: num($("#set-income").value) ?? 0, efund: num($("#set-efund").value) ?? 0 }; commit(); });
+  $("#txForm").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const amount = num($("#tx-amt").value); if (amount === null) return;
+    const date = $("#tx-date").value || today();
+    state.txns.push({ id: uid(), date, desc: $("#tx-desc").value.trim(), cat: $("#tx-cat").value, amount });
+    viewMonth = date.slice(0, 7);
+    $("#tx-desc").value = ""; $("#tx-amt").value = "";
+    commit(); $("#tx-desc").focus();
+  });
+  $("#txRows").addEventListener("click", (e) => { const b = e.target.closest("[data-deltx]"); if (b) { state.txns = state.txns.filter((t) => t.id !== b.dataset.deltx); commit(); } });
+  $("#catForm").addEventListener("submit", (e) => {
+    e.preventDefault();
+    state.categories.push({ id: "c" + uid(), name: $("#cat-name").value.trim(), limit: num($("#cat-limit").value) ?? 0, kind: $("#cat-kind").value });
+    $("#cat-name").value = ""; $("#cat-limit").value = ""; commit();
+  });
+  $("#catRows").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-delcat]"); if (!b) return;
+    const id = b.dataset.delcat;
+    if (state.txns.some((t) => t.cat === id) && b.dataset.armed !== "1") { b.dataset.armed = "1"; b.textContent = "Has transactions, tap again"; return; }
+    state.categories = state.categories.filter((c) => c.id !== id); state.txns = state.txns.filter((t) => t.cat !== id); commit();
+  });
+
+  // ---------- AI assistant ----------
+  let sampleFn = null;
+  const turns = [];
+  let busy = null;
+
+  function snapshotForAI() {
+    const p = portfolio(), b = budget(thisMonth());
+    const catName = (id) => state.categories.find((c) => c.id === id)?.name || "Uncategorized";
+    return {
+      today: today(),
+      dataIsExample: state.example,
+      portfolio: {
+        totalValue: Math.round(p.total), totalCostBasis: Math.round(p.basis), totalGain: Math.round(p.gain),
+        stocks: p.rows.map((r) => ({
+          ticker: r.s.ticker, name: r.s.name, shares: r.s.shares, avgCost: r.s.cost, price: r.s.price,
+          value: Math.round(r.value), gainPct: r.gainPct === null ? null : +r.gainPct.toFixed(1), portfolioWeightPct: +r.weight.toFixed(1),
+          metrics: { pe: r.s.pe, epsGrowthPct: r.s.epsGrowth, revenueGrowthPct: r.s.revGrowth, netMarginPct: r.s.margin, debtToEquity: r.s.debtEq, dividendYieldPct: r.s.divYield, low52: r.s.low52, high52: r.s.high52 },
+          appScore: `${r.score.total}/${r.score.max}`, appVerdict: r.score.verdict.label,
+          scoreFactors: r.score.factors.map((f) => `${f.name} ${f.value}: ${f.pts} pts`),
+        })),
+      },
+      budget: {
+        month: thisMonth(), monthlyTakeHome: b.inc, emergencyFund: b.efund, emergencyFundMonthsOfNeeds: b.efMonths === null ? null : +b.efMonths.toFixed(1),
+        planned: b.plan, actualThisMonth: b.actual, leftThisMonth: +b.left.toFixed(2), savingsRatePct: b.savingsRate === null ? null : +b.savingsRate.toFixed(1),
+        categories: state.categories.map((c) => ({ name: c.name, type: c.kind, monthlyLimit: c.limit, spentThisMonth: +(b.byCat[c.id] || 0).toFixed(2) })),
+        recentTransactions: [...state.txns].sort((a, c) => c.date.localeCompare(a.date)).slice(0, 60).map((t) => ({ date: t.date, desc: t.desc, category: catName(t.cat), amount: t.amount })),
+      },
+    };
+  }
+
+  function instructions() {
+    return `You are Ledgerline, a personal finance assistant inside a stock-analysis and budgeting app. The user's current data is below as JSON (it is their own entry, not live market data; prices may be stale).
+
+How the app scores stocks: points for valuation (PEG = P/E ÷ (EPS growth + dividend yield)), earnings growth, revenue growth, net margin, debt/equity, and dividend yield. ≥50% of max points = "Buy candidate", 0 or more = "Hold / watch", net negative = "Avoid for now".
+
+Guidelines:
+- Ground every answer in the user's numbers; cite them (tickers, dollars, percentages).
+- Be direct and practical. Give a clear lean (e.g. "MSFT looks strongest on these numbers") and explain why, then name the key risks.
+- Consider the whole picture: concentration, emergency fund, savings rate, and whether they can afford to invest more before suggesting buying.
+- If data is missing or looks stale, say what to check.
+- You can't see live prices or news; say so when it matters.
+- Keep answers short: a few short paragraphs or bullets. Use **bold** sparingly. No tables.
+- End stock-buying recommendations with a one-line reminder that this is educational, not personalized financial advice.
+${state.example ? "- NOTE: the user is still viewing the app's EXAMPLE data. Mention this briefly if they ask about 'my' stocks or budget.\n" : ""}
+USER DATA:
+${JSON.stringify(snapshotForAI())}`;
+  }
+
+  function renderMd(text) {
+    const lines = esc(text).split("\n");
+    let html = "", inList = false;
+    for (const raw of lines) {
+      const line = raw.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+      const m = line.match(/^\s*(?:[-*•]|\d+\.)\s+(.*)$/);
+      if (m) { if (!inList) { html += "<ul>"; inList = true; } html += `<li>${m[1]}</li>`; continue; }
+      if (inList) { html += "</ul>"; inList = false; }
+      const h = line.match(/^#{1,4}\s+(.*)$/);
+      if (h) html += `<p><strong>${h[1]}</strong></p>`;
+      else if (line.trim()) html += `<p>${line}</p>`;
+    }
+    if (inList) html += "</ul>";
+    return html;
+  }
+
+  function addMsg(role, content) {
+    const d = document.createElement("div");
+    d.className = "msg " + role;
+    if (role === "user") d.textContent = content; else d.innerHTML = renderMd(content);
+    $("#msgs").appendChild(d);
+    d.scrollIntoView({ block: "end", behavior: "smooth" });
+    return d;
+  }
+
+  async function ask(q) {
+    q = (q || "").trim();
+    if (!q || busy) return;
+    $("#chips").hidden = true;
+    addMsg("user", q);
+    turns.push({ role: "user", content: q });
+    const out = addMsg("ai", "Thinking…");
+    if (!sampleFn) {
+      out.innerHTML = renderMd("The AI assistant works when this app is opened in Claude. Your stock scores and budget still work everywhere.");
+      turns.pop();
+      return;
+    }
+    const ctl = new AbortController();
+    busy = ctl;
+    $("#chatSend").textContent = "Stop";
+    const history = turns.slice(-12);
+    try {
+      const res = await sampleFn([{ role: "user", content: instructions() }, ...history], {
+        signal: ctl.signal, cache: false,
+        onText: ({ text }) => { out.innerHTML = renderMd(text || "Thinking…"); },
+      });
+      out.innerHTML = renderMd(res.text);
+      turns.push({ role: "assistant", content: res.text });
+    } catch (e) {
+      const msg = e?.code === "cancelled" ? (e.text ? e.text + "\n\n(Stopped.)" : "Stopped.")
+        : e?.code === "not_granted" ? "The AI needs permission to answer. Allow it from this page's Permissions menu, then ask again."
+        : e?.code === "rate_limited" ? "Too many questions in a short time. Wait a minute and ask again."
+        : "Something went wrong getting an answer: " + (e?.message || "unknown error") + ". Try again.";
+      out.innerHTML = renderMd(msg);
+      if (e?.text) turns.push({ role: "assistant", content: e.text });
+    } finally {
+      busy = null;
+      $("#chatSend").textContent = "Ask";
+    }
+  }
+
+  $("#chatForm").addEventListener("submit", (e) => {
+    e.preventDefault();
+    if (busy) { busy.abort(); return; }
+    const q = $("#chatInput").value; $("#chatInput").value = ""; ask(q);
+  });
+  $("#chatInput").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("#chatForm").requestSubmit(); } });
+  $("#chips").addEventListener("click", (e) => { const c = e.target.closest(".chip"); if (c) ask(c.textContent); });
+
+  // ---------- boot ----------
+  fillForm(null);
+  renderAll();
+  setSaveState("Loading…");
+  initStorage();
+  Promise.resolve(window.claude?.use?.("sample")).then((s) => {
+    sampleFn = s || null;
+    if (!sampleFn) $("#aiNote").textContent = "The AI assistant is available when this app is opened in Claude. Everything else works here.";
+  }).catch(() => {});
+})();
+</script>
