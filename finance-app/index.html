@@ -204,11 +204,12 @@ input[type="number"] { font-family: var(--font-data); }
       </div>
       <div class="summary" id="picksSummary"></div>
     </div>
+    <div class="panel" id="checkPanel" hidden></div>
     <div class="panel" id="picksHoldings" hidden></div>
     <div class="grid-2" id="picksList" style="align-items:start"></div>
     <div class="panel" id="picksReview" hidden></div>
     <div class="panel" id="picksAvoid" hidden></div>
-    <p class="disclaimer">Picks are researched by Claude from public news and market data at each weekday's market open and close, then scored with the same rules as your Stocks tab. They are ideas to research, not financial advice. Check the price and news yourself before you buy.</p>
+    <p class="disclaimer">Picks are researched by Claude from public news and market data at each weekday's market open and close, with quick checks every hour in between, then scored with the same rules as your Stocks tab. They are ideas to research, not financial advice. Check the price and news yourself before you buy.</p>
   </section>
 
   <!-- STOCKS -->
@@ -720,6 +721,7 @@ input[type="number"] { font-family: var(--font-data); }
       today: today(),
       dataIsExample: state.example,
       latestDailyPicks: picksDocs[0] ? { date: picksDocs[0].date, session: picksDocs[0].session || "open", review: picksDocs[0].review || [], marketSummary: String(picksDocs[0].marketSummary || "").slice(0, 1500), picks: (picksDocs[0].picks || []).map((pk) => ({ ticker: pk.ticker, name: pk.name, price: pk.price, thesis: pk.thesis, risks: pk.risks, appVerdict: scoreStock(pickToStock(pk)).verdict.label })), avoid: picksDocs[0].avoid || [], holdingSignals: picksDocs[0].holdings || [] } : null,
+      latestHourlyCheck: latestCheck,
       portfolio: {
         totalValue: Math.round(p.total), totalCostBasis: Math.round(p.basis), totalGain: Math.round(p.gain),
         stocks: p.rows.map((r) => ({
@@ -839,12 +841,14 @@ ${JSON.stringify(snapshotForAI())}`;
   }
 
   function renderPicks() {
+    renderCheck();
     const meta = $("#picksMeta"), list = $("#picksList"), sum = $("#picksSummary"), avoid = $("#picksAvoid");
     if (!picksDocs.length) {
       $("#picksDateWrap").hidden = true;
       meta.textContent = picksStatus === "loading" ? "Loading the latest report…" : picksStatus === "nodb" ? "Daily picks appear when this app is opened in Claude." : "No reports yet.";
       sum.innerHTML = picksStatus === "ready" ? `<p class="empty">Claude researches the market every weekday morning and posts its best ideas here. The first report shows up after the next scheduled run.</p>` : "";
-      list.innerHTML = ""; avoid.hidden = true; $("#picksHoldings").hidden = true; $("#sellAlert").hidden = true;
+      list.innerHTML = ""; avoid.hidden = true; $("#picksHoldings").hidden = true;
+      if (latestCheck) renderHoldingSignals({ holdings: [] }); else $("#sellAlert").hidden = true;
       return;
     }
     const d = picksDocs[Math.min(picksSel, picksDocs.length - 1)];
@@ -918,11 +922,32 @@ ${JSON.stringify(snapshotForAI())}`;
           <td style="white-space:normal;min-width:240px">${esc(h.reason || "")}${src.length ? `<div class="sources">${src.map((x) => `<a href="${esc(x.url)}" target="_blank" rel="noopener noreferrer">${esc(x.title)}</a>`).join("")}</div>` : ""}</td></tr>`;
       }).join("")}</tbody></table></div>` : "";
     // Overview banner for the newest report only
-    const latest = picksDocs[0];
+    const latest = newestHoldingsSource();
     const alerts = (Array.isArray(latest?.holdings) ? latest.holdings : []).filter((h) => h && h.ticker && (h.signal === "sell" || h.signal === "trim"));
     const banner = $("#sellAlert");
     banner.hidden = !alerts.length;
     banner.innerHTML = alerts.length ? `<span><strong>${alerts.some((h) => h.signal === "sell") ? "Sell alert" : "Trim alert"}:</strong> ${alerts.map((h) => `<span class="ticker">${esc(h.ticker)}</span> (${SIGNALS[h.signal].label.toLowerCase()}) ${esc(h.reason || "")}`).join(" · ")}</span><button class="btn small" data-goto="picks">See details</button>` : "";
+  }
+
+  // Hourly market checks (collection "checks"); the newest of check vs. report drives the alert banner
+  let latestCheck = null;
+  function newestHoldingsSource() {
+    const r = picksDocs[0], c = latestCheck;
+    if (!c) return r; if (!r) return c;
+    return String(c.generatedAt || "") > String(r.generatedAt || "") ? c : r;
+  }
+  function renderCheck() {
+    const c = latestCheck, el = $("#checkPanel");
+    const fresh = c && c.date === new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+    el.hidden = !fresh;
+    if (!fresh) { el.innerHTML = ""; return; }
+    const hs = (Array.isArray(c.holdings) ? c.holdings : []).filter((h) => h && h.ticker && SIGNALS[h.signal]).sort((a, b) => SIGNALS[a.signal].rank - SIGNALS[b.signal].rank);
+    const pk = (Array.isArray(c.picks) ? c.picks : []).filter((x) => x && x.ticker);
+    const cls = (v) => (v === null ? "" : v >= 0 ? "pos" : "neg");
+    el.innerHTML = `<div class="panel-head"><div><h2>Latest check · ${esc(c.time || "")}</h2><p class="sub">${esc(c.market || "")}</p></div><span class="pill neutral">Updates hourly while the market is open</span></div>
+      ${c.headline ? `<p style="margin:0 0 10px"><strong>${esc(c.headline)}</strong></p>` : ""}
+      <div class="factors">${hs.map((h) => `<div class="factor"><span><span class="ticker">${esc(h.ticker)}</span> <span class="num ${cls(num(h.dayChangePct))}">${pct(num(h.dayChangePct))}</span> <span class="sub num">${money(num(h.price), 2)}</span></span><span class="pill ${SIGNALS[h.signal].cls}">${SIGNALS[h.signal].label}${h.changed ? " · new" : ""}</span><span class="fnote">${esc(h.reason || "")}</span></div>`).join("")}
+      ${pk.map((x) => { const ch = num(x.changePct); return `<div class="factor"><span><span class="ticker">${esc(x.ticker)}</span> <span class="sub">today's pick</span> <span class="num ${cls(ch)}">${pct(ch, 2)}</span> <span class="sub">since picked</span></span>${x.buyNow ? `<span class="pill good">Buy now</span>` : `<span></span>`}${x.note ? `<span class="fnote">${esc(x.note)}</span>` : ""}</div>`; }).join("")}</div>`;
   }
 
   async function initPicks() {
@@ -933,6 +958,10 @@ ${JSON.stringify(snapshotForAI())}`;
       picksDocs = snap.docs.map((x) => x.data()).filter((x) => x && x.date);
       picksStatus = "ready"; renderPicks();
     }, () => { picksStatus = "ready"; renderPicks(); });
+    db.collection("checks").orderBy("generatedAt", "desc").limit(1).onSnapshot((snap) => {
+      latestCheck = snap.docs.map((x) => x.data()).find((x) => x && x.generatedAt) || null;
+      renderCheck(); renderPicks();
+    }, () => {});
   }
 
   // ---------- boot ----------
