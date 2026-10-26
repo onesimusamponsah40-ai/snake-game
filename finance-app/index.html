@@ -69,6 +69,7 @@ section.view { display: grid; gap: 20px; }
 .pos { color: var(--good); } .neg { color: var(--bad); }
 .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; }
 .banner { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; background: var(--warn-soft); color: var(--fg); border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px; font-size: 14px; }
+.banner.alert { background: var(--bad-soft); }
 .btn { font: 600 14px var(--font-body); border-radius: 8px; padding: 8px 14px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); cursor: pointer; }
 .btn:hover { border-color: var(--accent); }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--surface); }
@@ -176,6 +177,7 @@ input[type="number"] { font-family: var(--font-data); }
 
   <!-- OVERVIEW -->
   <section class="view" id="view-overview">
+    <div class="banner alert" id="sellAlert" hidden></div>
     <div class="kpis" id="kpis"></div>
     <div class="grid-2">
       <div class="panel">
@@ -202,6 +204,7 @@ input[type="number"] { font-family: var(--font-data); }
       </div>
       <div class="summary" id="picksSummary"></div>
     </div>
+    <div class="panel" id="picksHoldings" hidden></div>
     <div class="grid-2" id="picksList" style="align-items:start"></div>
     <div class="panel" id="picksReview" hidden></div>
     <div class="panel" id="picksAvoid" hidden></div>
@@ -716,7 +719,7 @@ input[type="number"] { font-family: var(--font-data); }
     return {
       today: today(),
       dataIsExample: state.example,
-      latestDailyPicks: picksDocs[0] ? { date: picksDocs[0].date, session: picksDocs[0].session || "open", review: picksDocs[0].review || [], marketSummary: String(picksDocs[0].marketSummary || "").slice(0, 1500), picks: (picksDocs[0].picks || []).map((pk) => ({ ticker: pk.ticker, name: pk.name, price: pk.price, thesis: pk.thesis, risks: pk.risks, appVerdict: scoreStock(pickToStock(pk)).verdict.label })), avoid: picksDocs[0].avoid || [] } : null,
+      latestDailyPicks: picksDocs[0] ? { date: picksDocs[0].date, session: picksDocs[0].session || "open", review: picksDocs[0].review || [], marketSummary: String(picksDocs[0].marketSummary || "").slice(0, 1500), picks: (picksDocs[0].picks || []).map((pk) => ({ ticker: pk.ticker, name: pk.name, price: pk.price, thesis: pk.thesis, risks: pk.risks, appVerdict: scoreStock(pickToStock(pk)).verdict.label })), avoid: picksDocs[0].avoid || [], holdingSignals: picksDocs[0].holdings || [] } : null,
       portfolio: {
         totalValue: Math.round(p.total), totalCostBasis: Math.round(p.basis), totalGain: Math.round(p.gain),
         stocks: p.rows.map((r) => ({
@@ -841,7 +844,7 @@ ${JSON.stringify(snapshotForAI())}`;
       $("#picksDateWrap").hidden = true;
       meta.textContent = picksStatus === "loading" ? "Loading the latest report…" : picksStatus === "nodb" ? "Daily picks appear when this app is opened in Claude." : "No reports yet.";
       sum.innerHTML = picksStatus === "ready" ? `<p class="empty">Claude researches the market every weekday morning and posts its best ideas here. The first report shows up after the next scheduled run.</p>` : "";
-      list.innerHTML = ""; avoid.hidden = true;
+      list.innerHTML = ""; avoid.hidden = true; $("#picksHoldings").hidden = true; $("#sellAlert").hidden = true;
       return;
     }
     const d = picksDocs[Math.min(picksSel, picksDocs.length - 1)];
@@ -870,6 +873,7 @@ ${JSON.stringify(snapshotForAI())}`;
         <div class="form-actions"><button class="btn small ${have ? "" : "primary"}" data-pick="${i}">${have ? "Update my numbers" : "Add to watchlist"}</button><button class="btn small" data-askpick="${i}">Ask AI</button></div>
       </article>`;
     }).join("") || `<div class="panel"><p class="empty">No picks met the bar today. Sometimes the best move is to wait.</p></div>`;
+    renderHoldingSignals(d);
     const rv = (Array.isArray(d.review) ? d.review : []).filter((x) => x && x.ticker);
     $("#picksReview").hidden = !rv.length;
     $("#picksReview").innerHTML = rv.length ? `<div class="panel-head"><div><h2>How the morning picks did</h2><p class="sub">Price when picked vs. price at the close</p></div></div>
@@ -897,6 +901,29 @@ ${JSON.stringify(snapshotForAI())}`;
     }
     if (q) { const pk = d.picks[+q.dataset.askpick]; showView("ai"); ask(`Today's daily picks include ${pk.ticker}. Given my portfolio and budget, should I buy it, and how much would be sensible?`); }
   });
+
+  // Sell / trim / watch / hold signals for the stocks the user owns
+  const SIGNALS = { sell: { label: "Sell", cls: "bad", rank: 0 }, trim: { label: "Trim", cls: "warn", rank: 1 }, watch: { label: "Watch", cls: "warn", rank: 2 }, hold: { label: "Hold", cls: "good", rank: 3 } };
+  function renderHoldingSignals(d) {
+    const hs = (Array.isArray(d.holdings) ? d.holdings : []).filter((h) => h && h.ticker && SIGNALS[h.signal])
+      .sort((a, b) => SIGNALS[a.signal].rank - SIGNALS[b.signal].rank);
+    const panel = $("#picksHoldings");
+    panel.hidden = !hs.length;
+    panel.innerHTML = hs.length ? `<div class="panel-head"><div><h2>Your stocks</h2><p class="sub">Should you sell, trim, watch, or hold what you own</p></div></div>
+      <div class="table-scroll"><table><thead><tr><th>Ticker</th><th>Signal</th><th class="n">Price</th><th class="n">Today</th><th class="n">1 month</th><th class="n">Vs. your cost</th><th>Why</th></tr></thead><tbody>${hs.map((h) => {
+        const sg = SIGNALS[h.signal], dc = num(h.dayChangePct), mc = num(h.monthChangePct), vc = num(h.vsCostPct);
+        const cls = (v) => (v === null ? "" : v >= 0 ? "pos" : "neg");
+        const src = (Array.isArray(h.sources) ? h.sources : []).map((x) => ({ url: safeUrl(x?.url), title: x?.title || x?.url })).filter((x) => x.url);
+        return `<tr><td class="ticker">${esc(h.ticker)}</td><td><span class="pill ${sg.cls}">${sg.label}</span></td><td class="n">${money(num(h.price), 2)}</td><td class="n ${cls(dc)}">${pct(dc)}</td><td class="n ${cls(mc)}">${pct(mc)}</td><td class="n ${cls(vc)}">${pct(vc)}</td>
+          <td style="white-space:normal;min-width:240px">${esc(h.reason || "")}${src.length ? `<div class="sources">${src.map((x) => `<a href="${esc(x.url)}" target="_blank" rel="noopener noreferrer">${esc(x.title)}</a>`).join("")}</div>` : ""}</td></tr>`;
+      }).join("")}</tbody></table></div>` : "";
+    // Overview banner for the newest report only
+    const latest = picksDocs[0];
+    const alerts = (Array.isArray(latest?.holdings) ? latest.holdings : []).filter((h) => h && h.ticker && (h.signal === "sell" || h.signal === "trim"));
+    const banner = $("#sellAlert");
+    banner.hidden = !alerts.length;
+    banner.innerHTML = alerts.length ? `<span><strong>${alerts.some((h) => h.signal === "sell") ? "Sell alert" : "Trim alert"}:</strong> ${alerts.map((h) => `<span class="ticker">${esc(h.ticker)}</span> (${SIGNALS[h.signal].label.toLowerCase()}) ${esc(h.reason || "")}`).join(" · ")}</span><button class="btn small" data-goto="picks">See details</button>` : "";
+  }
 
   async function initPicks() {
     let db = null;
