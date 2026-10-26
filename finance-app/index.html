@@ -203,8 +203,9 @@ input[type="number"] { font-family: var(--font-data); }
       <div class="summary" id="picksSummary"></div>
     </div>
     <div class="grid-2" id="picksList" style="align-items:start"></div>
+    <div class="panel" id="picksReview" hidden></div>
     <div class="panel" id="picksAvoid" hidden></div>
-    <p class="disclaimer">Picks are researched by Claude from public news and market data each weekday morning, then scored with the same rules as your Stocks tab. They are ideas to research, not financial advice. Check the price and news yourself before you buy.</p>
+    <p class="disclaimer">Picks are researched by Claude from public news and market data at each weekday's market open and close, then scored with the same rules as your Stocks tab. They are ideas to research, not financial advice. Check the price and news yourself before you buy.</p>
   </section>
 
   <!-- STOCKS -->
@@ -715,7 +716,7 @@ input[type="number"] { font-family: var(--font-data); }
     return {
       today: today(),
       dataIsExample: state.example,
-      latestDailyPicks: picksDocs[0] ? { date: picksDocs[0].date, marketSummary: String(picksDocs[0].marketSummary || "").slice(0, 1500), picks: (picksDocs[0].picks || []).map((pk) => ({ ticker: pk.ticker, name: pk.name, price: pk.price, thesis: pk.thesis, risks: pk.risks, appVerdict: scoreStock(pickToStock(pk)).verdict.label })), avoid: picksDocs[0].avoid || [] } : null,
+      latestDailyPicks: picksDocs[0] ? { date: picksDocs[0].date, session: picksDocs[0].session || "open", review: picksDocs[0].review || [], marketSummary: String(picksDocs[0].marketSummary || "").slice(0, 1500), picks: (picksDocs[0].picks || []).map((pk) => ({ ticker: pk.ticker, name: pk.name, price: pk.price, thesis: pk.thesis, risks: pk.risks, appVerdict: scoreStock(pickToStock(pk)).verdict.label })), avoid: picksDocs[0].avoid || [] } : null,
       portfolio: {
         totalValue: Math.round(p.total), totalCostBasis: Math.round(p.basis), totalGain: Math.round(p.gain),
         stocks: p.rows.map((r) => ({
@@ -827,6 +828,7 @@ ${JSON.stringify(snapshotForAI())}`;
   const safeUrl = (u) => (/^https?:\/\//i.test(String(u || "")) ? String(u) : null);
   const PICK_FIELDS = ["ticker", "name", "price", "pe", "epsGrowth", "revGrowth", "margin", "debtEq", "divYield", "low52", "high52"];
 
+  const sessionLabel = (d) => (d.session === "close" ? "Market close" : "Market open");
   function pickToStock(pk) {
     const s = {};
     PICK_FIELDS.forEach((k) => (s[k] = k === "ticker" ? String(pk.ticker || "").toUpperCase() : k === "name" ? String(pk.name || "") : num(pk[k])));
@@ -844,9 +846,9 @@ ${JSON.stringify(snapshotForAI())}`;
     }
     const d = picksDocs[Math.min(picksSel, picksDocs.length - 1)];
     $("#picksDateWrap").hidden = picksDocs.length < 2;
-    $("#picksDate").innerHTML = picksDocs.map((x, i) => `<option value="${i}" ${i === picksSel ? "selected" : ""}>${esc(x.date)}</option>`).join("");
+    $("#picksDate").innerHTML = picksDocs.map((x, i) => `<option value="${i}" ${i === picksSel ? "selected" : ""}>${esc(x.date)} · ${sessionLabel(x)}</option>`).join("");
     const when = d.generatedAt ? new Date(d.generatedAt) : null;
-    meta.textContent = "Report for " + new Date(d.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" }) + (when && !isNaN(when) ? " · researched " + when.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "");
+    meta.textContent = sessionLabel(d) + " report for " + new Date(d.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" }) + (when && !isNaN(when) ? " · researched " + when.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "");
     sum.innerHTML = renderMd(String(d.marketSummary || ""));
     const owned = new Set(state.stocks.map((s) => String(s.ticker).toUpperCase()));
     const picks = Array.isArray(d.picks) ? d.picks : [];
@@ -868,6 +870,13 @@ ${JSON.stringify(snapshotForAI())}`;
         <div class="form-actions"><button class="btn small ${have ? "" : "primary"}" data-pick="${i}">${have ? "Update my numbers" : "Add to watchlist"}</button><button class="btn small" data-askpick="${i}">Ask AI</button></div>
       </article>`;
     }).join("") || `<div class="panel"><p class="empty">No picks met the bar today. Sometimes the best move is to wait.</p></div>`;
+    const rv = (Array.isArray(d.review) ? d.review : []).filter((x) => x && x.ticker);
+    $("#picksReview").hidden = !rv.length;
+    $("#picksReview").innerHTML = rv.length ? `<div class="panel-head"><div><h2>How the morning picks did</h2><p class="sub">Price when picked vs. price at the close</p></div></div>
+      <div class="table-scroll"><table><thead><tr><th>Ticker</th><th class="n">Picked at</th><th class="n">Close</th><th class="n">Change</th><th>Note</th></tr></thead><tbody>${rv.map((x) => {
+        const a = num(x.pickPrice), b = num(x.closePrice), c = num(x.changePct) ?? (a && b !== null ? ((b - a) / a) * 100 : null);
+        return `<tr><td class="ticker">${esc(x.ticker)}</td><td class="n">${money(a, 2)}</td><td class="n">${money(b, 2)}</td><td class="n ${c === null ? "" : c >= 0 ? "pos" : "neg"}">${pct(c, 2)}</td><td style="white-space:normal;min-width:200px">${esc(x.note || "")}</td></tr>`;
+      }).join("")}</tbody></table></div>` : "";
     const av = Array.isArray(d.avoid) ? d.avoid : [];
     avoid.hidden = !av.length;
     avoid.innerHTML = av.length ? `<div class="panel-head"><div><h2>Steer clear today</h2><p class="sub">Popular names that look risky right now</p></div></div><div class="factors">${av.map((a) => `<div class="factor"><span class="ticker">${esc(a.ticker)}</span><span class="pill bad">Avoid</span><span class="fnote">${esc(a.reason)}</span></div>`).join("")}</div>` : "";
@@ -893,7 +902,7 @@ ${JSON.stringify(snapshotForAI())}`;
     let db = null;
     try { db = await window.claude?.use?.("db"); } catch (e) {}
     if (!db) { picksStatus = "nodb"; renderPicks(); return; }
-    db.collection("picks").orderBy("date", "desc").limit(30).onSnapshot((snap) => {
+    db.collection("picks").orderBy("generatedAt", "desc").limit(40).onSnapshot((snap) => {
       picksDocs = snap.docs.map((x) => x.data()).filter((x) => x && x.date);
       picksStatus = "ready"; renderPicks();
     }, () => { picksStatus = "ready"; renderPicks(); });
