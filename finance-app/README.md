@@ -9,6 +9,21 @@ A personal finance app in one HTML file: stock scoring, budgeting, and an AI ass
 - **Daily picks**: each weekday, scheduled Claude research runs after the market opens (9:35am New York) and after it closes (4:10pm). The open run finds 3–5 stocks that score as buy candidates under the rules below, and posts them with a market summary, reasons, risks, and sources. The close run also reviews how the morning picks did and suggests ideas for the next day. Both runs also check the stocks you own and mark each one Sell, Trim, Watch or Hold with a reason; sell and trim alerts show as a banner on the Overview and lead the phone notification. Both list popular names to avoid. Between them, a quick check runs every hour (10:30am–3:30pm New York) on your stocks and the day's picks, and shows in a "Latest check" panel. Add any pick to your watchlist with one click.
 - **Ask AI**: chat about your portfolio and budget. The assistant sees your numbers and scores. It works when the page is opened as a Claude artifact.
 
+## Data collection
+
+`collector.py` gathers the numbers the research runs decide with, straight from the source:
+
+- **Prices** (Yahoo Finance chart API): price, day and 1-month change, 52-week range, 50- and 200-day moving averages, 14-day RSI, trailing dividend yield.
+- **Fundamentals** (SEC EDGAR XBRL filings): trailing-twelve-month revenue, net income and EPS with year-over-year growth, net margin, P/E, debt/equity.
+
+It scores each ticker with the rules below. The runs save the results to the app's `quotes` collection, and the Stocks tab uses them in place of typed-in numbers, so you only enter the ticker, shares and average cost. News, catalysts and analyst views still come from web search.
+
+```
+python3 collector.py MSFT KO TSLA
+```
+
+It needs network access to `query1.finance.yahoo.com`, `www.sec.gov` and `data.sec.gov`.
+
 ## Scoring
 
 | Factor | Points |

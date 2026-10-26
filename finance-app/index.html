@@ -233,7 +233,7 @@ input[type="number"] { font-family: var(--font-data); }
           <label class="f">Company<input id="sf-name" name="name" maxlength="60" placeholder="Apple Inc."></label>
           <label class="f">Shares<input id="sf-shares" name="shares" type="number" step="any" min="0" value="0"></label>
           <label class="f">Avg cost / share<input id="sf-cost" name="cost" type="number" step="any" min="0"></label>
-          <label class="f">Current price<input id="sf-price" name="price" type="number" step="any" min="0" required></label>
+          <label class="f">Current price<input id="sf-price" name="price" type="number" step="any" min="0"></label>
           <label class="f">P/E ratio<input id="sf-pe" name="pe" type="number" step="any"><span class="hint">Negative if losing money</span></label>
           <label class="f">EPS growth %<input id="sf-epsg" name="epsGrowth" type="number" step="any"><span class="hint">Expected yearly</span></label>
           <label class="f">Revenue growth %<input id="sf-revg" name="revGrowth" type="number" step="any"></label>
@@ -244,7 +244,7 @@ input[type="number"] { font-family: var(--font-data); }
           <label class="f">52-week high<input id="sf-high" name="high52" type="number" step="any" min="0"></label>
           <div class="form-actions"><button class="btn primary" type="submit" id="sf-submit">Save stock</button><button class="btn" type="button" id="sf-cancel">Reset</button></div>
         </form>
-        <p class="disclaimer">Find these numbers on any quote page (Yahoo Finance, Google Finance, your broker). Blank fields are skipped in the score.</p>
+        <p class="disclaimer">Only the ticker, shares and average cost are needed. Ledgerline's research collects the price and the other numbers from market data and SEC filings at the next check, and they replace anything typed here. Blank fields are skipped in the score.</p>
       </div>
     </div>
   </section>
@@ -484,8 +484,26 @@ input[type="number"] { font-family: var(--font-data); }
   }
 
   // ---------- portfolio math ----------
+  // Collected market data (collection "quotes", one doc per ticker) overrides typed-in numbers
+  let quotes = {};
+  const QUOTE_FIELDS = ["price", "pe", "epsGrowth", "revGrowth", "margin", "debtEq", "divYield", "low52", "high52"];
+  function withQuote(s) {
+    const q = quotes[String(s.ticker || "").toUpperCase()];
+    if (!q) return s;
+    const e = { ...s, _q: q };
+    QUOTE_FIELDS.forEach((k) => { if (num(q[k]) !== null) e[k] = num(q[k]); });
+    if (!e.name && q.name) e.name = q.name;
+    return e;
+  }
+  function quoteAge(q) {
+    const t = Date.parse(q?.collectedAt || "");
+    if (isNaN(t)) return "";
+    const d = new Date(t);
+    return d.toDateString() === new Date().toDateString() ? d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  }
+
   function portfolio() {
-    const rows = state.stocks.map((s) => {
+    const rows = state.stocks.map(withQuote).map((s) => {
       const sh = num(s.shares) || 0, price = num(s.price) || 0, cost = num(s.cost);
       const value = sh * price, basis = cost !== null ? sh * cost : null;
       return { s, value, basis, gain: basis !== null ? value - basis : null, gainPct: basis ? ((value - basis) / basis) * 100 : null, score: scoreStock(s) };
@@ -494,6 +512,15 @@ input[type="number"] { font-family: var(--font-data); }
     const basis = rows.reduce((a, r) => a + (r.basis ?? 0), 0);
     rows.forEach((r) => (r.weight = total ? (r.value / total) * 100 : 0));
     return { rows, total, basis, gain: total - basis };
+  }
+
+  function liveLine(q) {
+    const bits = [];
+    if (num(q.dayChangePct) !== null) bits.push("Today " + pct(num(q.dayChangePct)));
+    if (num(q.monthChangePct) !== null) bits.push("1 month " + pct(num(q.monthChangePct)));
+    if (q.trend && q.trend !== "unknown") bits.push("Trend: " + q.trend + (q.aboveSma200 === false ? " (below 200-day average)" : q.aboveSma200 ? " (above 200-day average)" : ""));
+    if (num(q.rsi14) !== null) bits.push("RSI " + Math.round(num(q.rsi14)));
+    return bits.join(" · ") + ". Data collected " + quoteAge(q) + " from market prices and SEC filings.";
   }
 
   // ---------- budget math ----------
@@ -561,7 +588,7 @@ input[type="number"] { font-family: var(--font-data); }
     $("#stockRows").innerHTML = p.rows.length
       ? p.rows.map((r) => `<tr class="clickable ${r.s.id === selectedId ? "selected" : ""}" data-id="${r.s.id}" tabindex="0">
           <td><span class="ticker">${esc(r.s.ticker)}</span><br><span class="sub">${esc(r.s.name || "")}</span></td>
-          <td class="n">${num(r.s.shares) ?? 0}</td><td class="n">${money(num(r.s.cost), 2)}</td><td class="n">${money(num(r.s.price), 2)}</td>
+          <td class="n">${num(r.s.shares) ?? 0}</td><td class="n">${money(num(r.s.cost), 2)}</td><td class="n">${money(num(r.s.price), 2)}${r.s._q ? `<br><span class="sub">live · ${esc(quoteAge(r.s._q))}</span>` : ""}</td>
           <td class="n">${r.value ? money(r.value) : "watch"}</td>
           <td class="n ${r.gain === null ? "" : r.gain >= 0 ? "pos" : "neg"}">${r.gainPct === null ? "—" : pct(r.gainPct)}</td>
           <td>${scoreCell(r.score)}</td><td><span class="pill ${r.score.verdict.cls}">${r.score.verdict.label}</span></td></tr>`).join("")
@@ -582,6 +609,7 @@ input[type="number"] { font-family: var(--font-data); }
       </div>
       <div class="factors" style="margin-top:12px">${sc.factors.map((x) => `<div class="factor"><span class="fname">${x.name} <span class="sub mono">${esc(x.value)}</span></span><span class="pts ${x.pts > 0 ? "pos" : x.pts < 0 ? "neg" : ""}">${x.pts > 0 ? "+" : ""}${x.pts} / ${x.max}</span><span class="fnote">${x.note}</span></div>`).join("") || `<p class="empty">Add P/E, growth, margin or debt numbers to score this stock.</p>`}</div>
       ${sc.ctx.map((c) => `<p class="sub">${esc(c)}</p>`).join("")}
+      ${r.s._q ? `<p class="sub">${esc(liveLine(r.s._q))}</p>` : `<p class="sub">Numbers typed in by you. Live data arrives after the next research check.</p>`}
       ${r.weight > 25 ? `<p class="sub"><span class="pill warn">Concentrated</span> Over a quarter of your portfolio is in this one stock.</p>` : ""}
       <div class="form-actions" style="margin-top:14px">
         <button class="btn primary" data-act="ask" data-id="${r.s.id}">Ask AI about ${esc(r.s.ticker)}</button>
@@ -728,6 +756,7 @@ input[type="number"] { font-family: var(--font-data); }
           ticker: r.s.ticker, name: r.s.name, shares: r.s.shares, avgCost: r.s.cost, price: r.s.price,
           value: Math.round(r.value), gainPct: r.gainPct === null ? null : +r.gainPct.toFixed(1), portfolioWeightPct: +r.weight.toFixed(1),
           metrics: { pe: r.s.pe, epsGrowthPct: r.s.epsGrowth, revenueGrowthPct: r.s.revGrowth, netMarginPct: r.s.margin, debtToEquity: r.s.debtEq, dividendYieldPct: r.s.divYield, low52: r.s.low52, high52: r.s.high52 },
+          live: r.s._q ? { collectedAt: r.s._q.collectedAt, dayChangePct: r.s._q.dayChangePct, monthChangePct: r.s._q.monthChangePct, trend: r.s._q.trend, rsi14: r.s._q.rsi14, sma50: r.s._q.sma50, sma200: r.s._q.sma200 } : null,
           appScore: `${r.score.total}/${r.score.max}`, appVerdict: r.score.verdict.label,
           scoreFactors: r.score.factors.map((f) => `${f.name} ${f.value}: ${f.pts} pts`),
         })),
@@ -958,6 +987,11 @@ ${JSON.stringify(snapshotForAI())}`;
       picksDocs = snap.docs.map((x) => x.data()).filter((x) => x && x.date);
       picksStatus = "ready"; renderPicks();
     }, () => { picksStatus = "ready"; renderPicks(); });
+    db.collection("quotes").limit(500).onSnapshot((snap) => {
+      const m = {};
+      snap.docs.forEach((x) => { const d = x.data(); if (d && d.ticker) m[String(d.ticker).toUpperCase()] = d; });
+      quotes = m; renderAll();
+    }, () => {});
     db.collection("checks").orderBy("generatedAt", "desc").limit(1).onSnapshot((snap) => {
       latestCheck = snap.docs.map((x) => x.data()).find((x) => x && x.generatedAt) || null;
       renderCheck(); renderPicks();
