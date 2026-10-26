@@ -6,6 +6,7 @@ A personal finance app in one HTML file: stock scoring, budgeting, and an AI ass
 
 - **Stocks**: enter your holdings or watchlist with key numbers (price, P/E, EPS growth, revenue growth, net margin, debt/equity, dividend yield, 52-week range). Each stock gets a score and a verdict: *Buy candidate*, *Hold / watch*, or *Avoid for now*. A breakdown shows how each factor counted. Gain/loss, allocation, and concentration warnings are included.
 - **Budget**: set your monthly take-home pay and emergency fund, create categories (need / want / saving) with limits, and log transactions. The app shows spending against each limit, a 50/30/20 check, your savings rate, and how many months your emergency fund covers.
+- **Daily picks**: each weekday morning a scheduled Claude research run looks at the market, finds 3–5 stocks that score as buy candidates under the rules below, and posts them with a market summary, reasons, risks, and sources. It also lists popular names to avoid. Add any pick to your watchlist with one click.
 - **Ask AI**: chat about your portfolio and budget. The assistant sees your numbers and scores. It works when the page is opened as a Claude artifact.
 
 ## Scoring

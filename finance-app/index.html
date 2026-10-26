@@ -130,6 +130,18 @@ input[type="number"] { font-family: var(--font-data); }
 .composer { display: flex; gap: 8px; margin-top: 12px; }
 .composer textarea { resize: vertical; min-height: 46px; }
 .disclaimer { font-size: 12px; color: var(--muted); }
+.pick { display: grid; gap: 10px; align-content: start; }
+.pick-head { display: flex; justify-content: space-between; align-items: start; gap: 12px; }
+.pick-head .ticker { font-size: 1.15rem; }
+.rank { font: 500 12px var(--font-data); color: var(--muted); }
+.metrics { display: flex; flex-wrap: wrap; gap: 6px 14px; font: 12px var(--font-data); color: var(--muted); }
+.metrics b { color: var(--fg); font-weight: 500; }
+.pick p { margin: 0; }
+.pick ul { margin: 0; padding-left: 18px; font-size: 14px; }
+.sources { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; }
+.sources a { color: var(--accent); overflow-wrap: anywhere; }
+.summary { max-width: 72ch; }
+.summary p { margin: 0 0 8px; }
 .detail-head { display: flex; justify-content: space-between; align-items: start; gap: 12px; flex-wrap: wrap; }
 .bigscore { font: 500 2rem var(--font-data); }
 @media (max-width: 560px) {
@@ -148,6 +160,7 @@ input[type="number"] { font-family: var(--font-data); }
     <div class="brand"><h1>Ledger<span>line</span></h1><span class="save-state" id="saveState">Loading…</span></div>
     <nav class="tabs" role="tablist" aria-label="Sections">
       <button role="tab" id="tab-overview" data-view="overview" aria-selected="true">Overview</button>
+      <button role="tab" id="tab-picks" data-view="picks" aria-selected="false">Daily picks</button>
       <button role="tab" id="tab-stocks" data-view="stocks" aria-selected="false">Stocks</button>
       <button role="tab" id="tab-budget" data-view="budget" aria-selected="false">Budget</button>
       <button role="tab" id="tab-ai" data-view="ai" aria-selected="false">Ask AI</button>
@@ -178,6 +191,20 @@ input[type="number"] { font-family: var(--font-data); }
       <div class="panel-head"><h2>Allocation</h2></div>
       <div id="alloc"></div>
     </div>
+  </section>
+
+  <!-- DAILY PICKS -->
+  <section class="view" id="view-picks" hidden>
+    <div class="panel">
+      <div class="panel-head">
+        <div><h2>Daily picks</h2><p class="sub" id="picksMeta">Loading the latest report…</p></div>
+        <label class="f" id="picksDateWrap" hidden>Report<select id="picksDate" style="width:auto"></select></label>
+      </div>
+      <div class="summary" id="picksSummary"></div>
+    </div>
+    <div class="grid-2" id="picksList" style="align-items:start"></div>
+    <div class="panel" id="picksAvoid" hidden></div>
+    <p class="disclaimer">Picks are researched by Claude from public news and market data each weekday morning, then scored with the same rules as your Stocks tab. They are ideas to research, not financial advice. Check the price and news yourself before you buy.</p>
   </section>
 
   <!-- STOCKS -->
@@ -595,6 +622,7 @@ input[type="number"] { font-family: var(--font-data); }
   function renderAll() {
     $("#exampleBanner").hidden = !state.example;
     renderOverview(); renderStocks(); renderBudget();
+    renderPicks();
   }
 
   // ---------- tabs ----------
@@ -607,9 +635,9 @@ input[type="number"] { font-family: var(--font-data); }
   document.querySelectorAll("nav.tabs button").forEach((b) => b.addEventListener("click", () => showView(b.dataset.view)));
   document.addEventListener("click", (e) => { const g = e.target.closest("[data-goto]"); if (g) showView(g.dataset.goto); });
   const hash = location.hash.slice(1);
-  let startTab = ["overview", "stocks", "budget", "ai"].includes(hash) ? hash : null;
+  let startTab = ["overview", "picks", "stocks", "budget", "ai"].includes(hash) ? hash : null;
   if (!startTab) { try { startTab = localStorage.getItem("ledgerline-tab"); } catch (e) {} }
-  if (["overview", "stocks", "budget", "ai"].includes(startTab)) showView(startTab);
+  if (["overview", "picks", "stocks", "budget", "ai"].includes(startTab)) showView(startTab);
 
   $("#clearExamples").addEventListener("click", () => { state = blankState(); selectedId = null; commit(); });
 
@@ -687,6 +715,7 @@ input[type="number"] { font-family: var(--font-data); }
     return {
       today: today(),
       dataIsExample: state.example,
+      latestDailyPicks: picksDocs[0] ? { date: picksDocs[0].date, marketSummary: String(picksDocs[0].marketSummary || "").slice(0, 1500), picks: (picksDocs[0].picks || []).map((pk) => ({ ticker: pk.ticker, name: pk.name, price: pk.price, thesis: pk.thesis, risks: pk.risks, appVerdict: scoreStock(pickToStock(pk)).verdict.label })), avoid: picksDocs[0].avoid || [] } : null,
       portfolio: {
         totalValue: Math.round(p.total), totalCostBasis: Math.round(p.basis), totalGain: Math.round(p.gain),
         stocks: p.rows.map((r) => ({
@@ -793,11 +822,90 @@ ${JSON.stringify(snapshotForAI())}`;
   $("#chatInput").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("#chatForm").requestSubmit(); } });
   $("#chips").addEventListener("click", (e) => { const c = e.target.closest(".chip"); if (c) ask(c.textContent); });
 
+  // ---------- daily picks (written by the scheduled research run) ----------
+  let picksDocs = [], picksSel = 0, picksStatus = "loading";
+  const safeUrl = (u) => (/^https?:\/\//i.test(String(u || "")) ? String(u) : null);
+  const PICK_FIELDS = ["ticker", "name", "price", "pe", "epsGrowth", "revGrowth", "margin", "debtEq", "divYield", "low52", "high52"];
+
+  function pickToStock(pk) {
+    const s = {};
+    PICK_FIELDS.forEach((k) => (s[k] = k === "ticker" ? String(pk.ticker || "").toUpperCase() : k === "name" ? String(pk.name || "") : num(pk[k])));
+    return s;
+  }
+
+  function renderPicks() {
+    const meta = $("#picksMeta"), list = $("#picksList"), sum = $("#picksSummary"), avoid = $("#picksAvoid");
+    if (!picksDocs.length) {
+      $("#picksDateWrap").hidden = true;
+      meta.textContent = picksStatus === "loading" ? "Loading the latest report…" : picksStatus === "nodb" ? "Daily picks appear when this app is opened in Claude." : "No reports yet.";
+      sum.innerHTML = picksStatus === "ready" ? `<p class="empty">Claude researches the market every weekday morning and posts its best ideas here. The first report shows up after the next scheduled run.</p>` : "";
+      list.innerHTML = ""; avoid.hidden = true;
+      return;
+    }
+    const d = picksDocs[Math.min(picksSel, picksDocs.length - 1)];
+    $("#picksDateWrap").hidden = picksDocs.length < 2;
+    $("#picksDate").innerHTML = picksDocs.map((x, i) => `<option value="${i}" ${i === picksSel ? "selected" : ""}>${esc(x.date)}</option>`).join("");
+    const when = d.generatedAt ? new Date(d.generatedAt) : null;
+    meta.textContent = "Report for " + new Date(d.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" }) + (when && !isNaN(when) ? " · researched " + when.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "");
+    sum.innerHTML = renderMd(String(d.marketSummary || ""));
+    const owned = new Set(state.stocks.map((s) => String(s.ticker).toUpperCase()));
+    const picks = Array.isArray(d.picks) ? d.picks : [];
+    list.innerHTML = picks.map((pk, i) => {
+      const st = pickToStock(pk), sc = scoreStock(st), have = owned.has(st.ticker);
+      const m = [["Price", money(st.price, 2)], ["P/E", st.pe ?? "—"], ["EPS gr.", pct(st.epsGrowth, 0)], ["Margin", st.margin === null ? "—" : st.margin + "%"], ["D/E", st.debtEq ?? "—"], ["Yield", st.divYield === null ? "—" : st.divYield + "%"]];
+      const risks = Array.isArray(pk.risks) ? pk.risks : pk.risks ? [pk.risks] : [];
+      const srcs = (Array.isArray(pk.sources) ? pk.sources : []).map((x) => ({ url: safeUrl(x?.url), title: x?.title || x?.url })).filter((x) => x.url);
+      return `<article class="panel pick">
+        <div class="pick-head">
+          <div><span class="rank">#${i + 1}</span> <span class="ticker">${esc(st.ticker)}</span><br><span class="sub">${esc(st.name)}</span></div>
+          <div style="text-align:right"><span class="pill ${sc.verdict.cls}">${sc.verdict.label}</span><div class="num sub" style="margin-top:4px">${sc.factors.length ? (sc.total > 0 ? "+" : "") + sc.total + "/" + sc.max : ""}</div></div>
+        </div>
+        <div class="metrics">${m.map(([k, v]) => `<span>${k} <b>${esc(v)}</b></span>`).join("")}</div>
+        ${pk.thesis ? `<p>${esc(pk.thesis)}</p>` : ""}
+        ${pk.catalyst ? `<p class="sub"><strong>Catalyst:</strong> ${esc(pk.catalyst)}</p>` : ""}
+        ${risks.length ? `<div><span class="sub"><strong>Risks</strong></span><ul>${risks.map((r) => `<li>${esc(r)}</li>`).join("")}</ul></div>` : ""}
+        ${srcs.length ? `<div class="sources">${srcs.map((x) => `<a href="${esc(x.url)}" target="_blank" rel="noopener noreferrer">${esc(x.title)}</a>`).join("")}</div>` : ""}
+        <div class="form-actions"><button class="btn small ${have ? "" : "primary"}" data-pick="${i}">${have ? "Update my numbers" : "Add to watchlist"}</button><button class="btn small" data-askpick="${i}">Ask AI</button></div>
+      </article>`;
+    }).join("") || `<div class="panel"><p class="empty">No picks met the bar today. Sometimes the best move is to wait.</p></div>`;
+    const av = Array.isArray(d.avoid) ? d.avoid : [];
+    avoid.hidden = !av.length;
+    avoid.innerHTML = av.length ? `<div class="panel-head"><div><h2>Steer clear today</h2><p class="sub">Popular names that look risky right now</p></div></div><div class="factors">${av.map((a) => `<div class="factor"><span class="ticker">${esc(a.ticker)}</span><span class="pill bad">Avoid</span><span class="fnote">${esc(a.reason)}</span></div>`).join("")}</div>` : "";
+  }
+
+  $("#picksDate").addEventListener("change", (e) => { picksSel = +e.target.value || 0; renderPicks(); });
+  $("#picksList").addEventListener("click", (e) => {
+    const d = picksDocs[picksSel]; if (!d) return;
+    const a = e.target.closest("[data-pick]"), q = e.target.closest("[data-askpick]");
+    if (a) {
+      const st = pickToStock(d.picks[+a.dataset.pick]);
+      const ex = state.stocks.find((s) => String(s.ticker).toUpperCase() === st.ticker);
+      if (ex) Object.assign(ex, Object.fromEntries(Object.entries(st).filter(([k, v]) => v !== null && v !== "" && k !== "ticker")));
+      else state.stocks.push({ id: uid(), shares: 0, cost: null, ...st });
+      selectedId = (ex || state.stocks[state.stocks.length - 1]).id;
+      commit();
+      a.textContent = ex ? "Updated" : "Added to watchlist";
+    }
+    if (q) { const pk = d.picks[+q.dataset.askpick]; showView("ai"); ask(`Today's daily picks include ${pk.ticker}. Given my portfolio and budget, should I buy it, and how much would be sensible?`); }
+  });
+
+  async function initPicks() {
+    let db = null;
+    try { db = await window.claude?.use?.("db"); } catch (e) {}
+    if (!db) { picksStatus = "nodb"; renderPicks(); return; }
+    db.collection("picks").orderBy("date", "desc").limit(30).onSnapshot((snap) => {
+      picksDocs = snap.docs.map((x) => x.data()).filter((x) => x && x.date);
+      picksStatus = "ready"; renderPicks();
+    }, () => { picksStatus = "ready"; renderPicks(); });
+  }
+
   // ---------- boot ----------
   fillForm(null);
   renderAll();
   setSaveState("Loading…");
   initStorage();
+  renderPicks();
+  initPicks();
   Promise.resolve(window.claude?.use?.("sample")).then((s) => {
     sampleFn = s || null;
     if (!sampleFn) $("#aiNote").textContent = "The AI assistant is available when this app is opened in Claude. Everything else works here.";
