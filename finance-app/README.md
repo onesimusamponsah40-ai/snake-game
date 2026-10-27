@@ -6,7 +6,7 @@ An AI stock market analyst in one HTML file: it finds the best stocks to buy, fl
 
 - **Stocks**: enter your holdings or watchlist with key numbers (price, P/E, EPS growth, revenue growth, net margin, debt/equity, dividend yield, 52-week range). Each stock gets a score and a verdict: *Buy candidate*, *Hold / watch*, or *Avoid for now*. A breakdown shows how each factor counted. Gain/loss, allocation, and concentration warnings are included.
 - **Daily picks**: each weekday, scheduled Claude research runs after the market opens (9:35am New York) and after it closes (4:10pm). The open run finds 3–5 stocks that score as buy candidates under the rules below, and posts them with a market summary, reasons, risks, and sources. The close run also reviews how the morning picks did and suggests ideas for the next day. Both runs also check the stocks you own and mark each one Sell, Trim, Watch or Hold with a reason; sell and trim alerts show as a banner on the Overview and lead the phone notification. Both list popular names to avoid. Between them, a quick check runs every hour (10:30am–3:30pm New York) on your stocks and the day's picks, and shows in a "Latest check" panel. Add any pick to your watchlist with one click.
-- **Ask AI**: chat about your portfolio and budget. The assistant sees your holdings, scores, trends, and the latest research picks and sell signals. It works when the page is opened as a Claude artifact.
+- **Ask AI**: chat about the market and your stocks. The assistant sees your holdings, scores, trends, and the latest research picks and sell signals. It works when the page is opened as a Claude artifact.
 
 ## Data collection
 
