@@ -109,14 +109,6 @@ input[type="number"] { font-family: var(--font-data); }
 .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; font-size: 13px; }
 .legend span { display: inline-flex; align-items: center; gap: 6px; }
 .legend b { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
-.catrow { display: grid; grid-template-columns: minmax(110px, 1fr) 2fr auto; gap: 12px; align-items: center; padding: 8px 0; }
-.track { height: 10px; border-radius: 5px; background: var(--surface-2); position: relative; overflow: hidden; }
-.track i { position: absolute; inset: 0 auto 0 0; border-radius: 5px; }
-.rule { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-.rule div { background: var(--surface-2); border-radius: 10px; padding: 12px; }
-.rule .k { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
-.rule .v { font: 500 1.2rem var(--font-data); }
-.rule .t { font-size: 12px; color: var(--muted); }
 .empty { color: var(--muted); font-size: 14px; padding: 12px 0; }
 .chat { display: grid; grid-template-rows: 1fr auto; min-height: 520px; }
 .msgs { display: flex; flex-direction: column; gap: 14px; overflow-y: auto; max-height: 60vh; padding-bottom: 8px; }
@@ -146,13 +138,10 @@ input[type="number"] { font-family: var(--font-data); }
 .detail-head { display: flex; justify-content: space-between; align-items: start; gap: 12px; flex-wrap: wrap; }
 .bigscore { font: 500 2rem var(--font-data); }
 @media (max-width: 560px) {
-  .rule { grid-template-columns: 1fr; }
-  .catrow { grid-template-columns: 1fr auto; }
-  .catrow .track { grid-column: 1 / -1; grid-row: 2; }
   nav.tabs { margin-left: 0; }
 }
 @media (prefers-reduced-motion: no-preference) {
-  .track i, .scorebar i { transition: width .3s ease; }
+  .scorebar i { transition: width .3s ease; }
 }
 </style>
 
@@ -163,7 +152,6 @@ input[type="number"] { font-family: var(--font-data); }
       <button role="tab" id="tab-overview" data-view="overview" aria-selected="true">Overview</button>
       <button role="tab" id="tab-picks" data-view="picks" aria-selected="false">Daily picks</button>
       <button role="tab" id="tab-stocks" data-view="stocks" aria-selected="false">Stocks</button>
-      <button role="tab" id="tab-budget" data-view="budget" aria-selected="false">Budget</button>
       <button role="tab" id="tab-ai" data-view="ai" aria-selected="false">Ask AI</button>
     </nav>
   </div>
@@ -185,8 +173,8 @@ input[type="number"] { font-family: var(--font-data); }
         <div id="ovStocks"></div>
       </div>
       <div class="panel">
-        <div class="panel-head"><div><h2>This month's spending</h2><p class="sub" id="ovMonthLabel"></p></div><button class="btn small" data-goto="budget">Open budget</button></div>
-        <div id="ovBudget"></div>
+        <div class="panel-head"><div><h2>Best buys right now</h2><p class="sub" id="ovPicksMeta">From the latest research report</p></div><button class="btn small" data-goto="picks">Open daily picks</button></div>
+        <div id="ovPicks"></div>
       </div>
     </div>
     <div class="panel">
@@ -249,68 +237,16 @@ input[type="number"] { font-family: var(--font-data); }
     </div>
   </section>
 
-  <!-- BUDGET -->
-  <section class="view" id="view-budget" hidden>
-    <div class="kpis" id="budgetKpis"></div>
-    <div class="grid-2">
-      <div class="panel">
-        <div class="panel-head">
-          <div><h2>Spending vs. limits</h2><p class="sub">Per category, for the month you pick</p></div>
-          <input type="month" id="monthPick" style="width:auto">
-        </div>
-        <div id="catBars"></div>
-      </div>
-      <div class="panel">
-        <div class="panel-head"><div><h2>50 / 30 / 20 check</h2><p class="sub">Needs, wants, and saving as a share of take-home pay, from your plan</p></div></div>
-        <div id="ruleBox"></div>
-        <form class="grid" id="settingsForm" style="margin-top:16px">
-          <label class="f">Monthly take-home pay<input id="set-income" type="number" step="any" min="0"></label>
-          <label class="f">Emergency fund balance<input id="set-efund" type="number" step="any" min="0"></label>
-          <div class="form-actions"><button class="btn" type="submit">Update</button></div>
-        </form>
-      </div>
-    </div>
-    <div class="grid-2">
-      <div class="panel">
-        <div class="panel-head"><h2>Transactions</h2><span class="sub" id="txCount"></span></div>
-        <form class="grid" id="txForm" autocomplete="off">
-          <label class="f">Date<input id="tx-date" type="date" required></label>
-          <label class="f">Description<input id="tx-desc" maxlength="60" required placeholder="Groceries"></label>
-          <label class="f">Category<select id="tx-cat"></select></label>
-          <label class="f">Amount<input id="tx-amt" type="number" step="any" min="0" required></label>
-          <div class="form-actions"><button class="btn primary" type="submit">Add</button></div>
-        </form>
-        <div class="table-scroll" style="margin-top:14px"><table>
-          <thead><tr><th>Date</th><th>Description</th><th>Category</th><th class="n">Amount</th><th></th></tr></thead>
-          <tbody id="txRows"></tbody>
-        </table></div>
-      </div>
-      <div class="panel">
-        <div class="panel-head"><h2>Categories</h2></div>
-        <form class="grid" id="catForm" autocomplete="off">
-          <label class="f">Name<input id="cat-name" maxlength="30" required placeholder="Dining out"></label>
-          <label class="f">Monthly limit<input id="cat-limit" type="number" step="any" min="0" required></label>
-          <label class="f">Type<select id="cat-kind"><option value="need">Need</option><option value="want">Want</option><option value="save">Saving / investing</option></select></label>
-          <div class="form-actions"><button class="btn primary" type="submit">Add</button></div>
-        </form>
-        <div class="table-scroll" style="margin-top:14px"><table>
-          <thead><tr><th>Category</th><th>Type</th><th class="n">Limit</th><th></th></tr></thead>
-          <tbody id="catRows"></tbody>
-        </table></div>
-      </div>
-    </div>
-  </section>
-
   <!-- AI -->
   <section class="view" id="view-ai" hidden>
     <div class="panel chat">
       <div class="msgs" id="msgs" aria-live="polite">
-        <div class="msg ai" id="aiIntro"><p>Ask me about your stocks or your budget. I can see the numbers on this page, the scores, and your spending.</p></div>
+        <div class="msg ai" id="aiIntro"><p>Ask me about the stock market and your stocks. I can see your holdings, their scores and trends, and the latest research picks and sell signals.</p></div>
         <div class="chips" id="chips">
           <button class="chip">Which of my stocks look best to buy more of?</button>
           <button class="chip">Which stock should I worry about, and why?</button>
-          <button class="chip">Where am I overspending this month?</button>
-          <button class="chip">How much can I safely invest each month?</button>
+          <button class="chip">What should I sell, if anything?</button>
+          <button class="chip">Explain today's top pick in simple terms.</button>
           <button class="chip">Is my portfolio too concentrated?</button>
         </div>
       </div>
@@ -336,12 +272,10 @@ input[type="number"] { font-family: var(--font-data); }
   const pct = (v, d = 1) => (v === null || isNaN(v) || !isFinite(v) ? "—" : (v > 0 ? "+" : "") + v.toFixed(d) + "%");
   const uid = () => Math.random().toString(36).slice(2, 10);
   const today = () => new Date().toISOString().slice(0, 10);
-  const thisMonth = () => today().slice(0, 7);
   const PALETTE = ["var(--accent)", "#2f9e8f", "#d07a2b", "#8a5cc7", "#c4475f", "#5a8f2e", "#3b82c4", "#a3863a"];
 
   // ---------- example data (shown only until the viewer saves their own) ----------
   function exampleState() {
-    const m = thisMonth();
     return {
       example: true,
       stocks: [
@@ -350,41 +284,15 @@ input[type="number"] { font-family: var(--font-data); }
         { id: uid(), ticker: "TSLA", name: "Tesla (example)", shares: 8, cost: 260, price: 220, pe: 70, epsGrowth: 10, revGrowth: 2, margin: 7, debtEq: 0.2, divYield: 0, low52: 140, high52: 290 },
         { id: uid(), ticker: "XYZ", name: "Speculative Co. (example)", shares: 0, cost: null, price: 9.4, pe: -12, epsGrowth: -20, revGrowth: -6, margin: -14, debtEq: 3.4, divYield: 0, low52: 6, high52: 21 },
       ],
-      settings: { income: 5200, efund: 6500 },
-      categories: [
-        { id: "c1", name: "Rent", kind: "need", limit: 1600 },
-        { id: "c2", name: "Groceries", kind: "need", limit: 450 },
-        { id: "c3", name: "Utilities & phone", kind: "need", limit: 220 },
-        { id: "c4", name: "Transport", kind: "need", limit: 250 },
-        { id: "c5", name: "Dining out", kind: "want", limit: 250 },
-        { id: "c6", name: "Shopping & fun", kind: "want", limit: 300 },
-        { id: "c7", name: "Investing", kind: "save", limit: 700 },
-        { id: "c8", name: "Emergency fund", kind: "save", limit: 300 },
-      ],
-      txns: [
-        { id: uid(), date: m + "-01", desc: "Rent", cat: "c1", amount: 1600 },
-        { id: uid(), date: m + "-03", desc: "Supermarket", cat: "c2", amount: 142.6 },
-        { id: uid(), date: m + "-05", desc: "Brokerage deposit", cat: "c7", amount: 700 },
-        { id: uid(), date: m + "-06", desc: "Electric bill", cat: "c3", amount: 96 },
-        { id: uid(), date: m + "-08", desc: "Restaurant", cat: "c5", amount: 88.4 },
-        { id: uid(), date: m + "-10", desc: "Gas", cat: "c4", amount: 54 },
-        { id: uid(), date: m + "-11", desc: "Sneakers", cat: "c6", amount: 129 },
-        { id: uid(), date: m + "-12", desc: "Takeout", cat: "c5", amount: 61.2 },
-        { id: uid(), date: m + "-14", desc: "Supermarket", cat: "c2", amount: 118.3 },
-        { id: uid(), date: m + "-15", desc: "Concert tickets", cat: "c6", amount: 210 },
-        { id: uid(), date: m + "-16", desc: "Brunch", cat: "c5", amount: 120 },
-      ],
     };
   }
   function blankState() {
-    const s = exampleState();
-    return { example: false, stocks: [], settings: { income: 0, efund: 0 }, categories: s.categories, txns: [] };
+    return { example: false, stocks: [] };
   }
 
   let state = exampleState();
   let selectedId = state.stocks[0]?.id ?? null;
   let editingId = null;
-  let viewMonth = thisMonth();
 
   // ---------- storage: private db doc per person, else this browser ----------
   const LS_KEY = "ledgerline-state-v1";
@@ -412,7 +320,7 @@ input[type="number"] { font-family: var(--font-data); }
       }
     }
     if (loaded && Array.isArray(loaded.stocks)) {
-      state = { example: false, stocks: loaded.stocks, settings: loaded.settings || { income: 0, efund: 0 }, categories: loaded.categories || [], txns: loaded.txns || [] };
+      state = { example: false, stocks: loaded.stocks };
       selectedId = state.stocks[0]?.id ?? null;
     }
     setSaveState(state.example ? "Example data, not saved" : savedLabel());
@@ -433,7 +341,7 @@ input[type="number"] { font-family: var(--font-data); }
     if (saving) { saveTimer = setTimeout(flush, 400); return; }
     if (!dirty) return;
     dirty = false; saving = true;
-    const data = { stocks: state.stocks, settings: state.settings, categories: state.categories, txns: state.txns, updatedAt: new Date().toISOString() };
+    const data = { stocks: state.stocks, updatedAt: new Date().toISOString() };
     try {
       if (store.kind === "db") await store.ref.set(data);
       else if (store.kind === "local") localStorage.setItem(LS_KEY, JSON.stringify(data));
@@ -523,19 +431,6 @@ input[type="number"] { font-family: var(--font-data); }
     return bits.join(" · ") + ". Data collected " + quoteAge(q) + " from market prices and SEC filings.";
   }
 
-  // ---------- budget math ----------
-  function budget(month = viewMonth) {
-    const inc = num(state.settings.income) || 0;
-    const tx = state.txns.filter((t) => t.date?.startsWith(month));
-    const byCat = {};
-    tx.forEach((t) => (byCat[t.cat] = (byCat[t.cat] || 0) + (+t.amount || 0)));
-    const plan = { need: 0, want: 0, save: 0 }, actual = { need: 0, want: 0, save: 0 };
-    state.categories.forEach((c) => { plan[c.kind] += +c.limit || 0; actual[c.kind] += byCat[c.id] || 0; });
-    const spent = tx.reduce((a, t) => a + (+t.amount || 0), 0);
-    const efund = num(state.settings.efund) || 0;
-    return { inc, tx, byCat, plan, actual, spent, spending: actual.need + actual.want, left: inc - spent, savingsRate: inc ? (actual.save / inc) * 100 : null, efMonths: plan.need ? efund / plan.need : null, efund };
-  }
-
   // ---------- rendering ----------
   function kpi(label, value, note, cls = "") {
     return `<div class="kpi"><div class="label">${esc(label)}</div><div class="value ${cls}">${value}</div><div class="note">${note}</div></div>`;
@@ -548,13 +443,20 @@ input[type="number"] { font-family: var(--font-data); }
   }
 
   function renderOverview() {
-    const p = portfolio(), b = budget(thisMonth());
+    const p = portfolio();
+    const held = p.rows.filter((r) => r.value > 0).sort((a, c) => c.value - a.value);
+    const dayMove = held.reduce((a, r) => { const d = num(r.s._q?.dayChangePct); return d === null ? a : a + r.value - r.value / (1 + d / 100); }, 0);
+    const hasDay = held.some((r) => num(r.s._q?.dayChangePct) !== null);
+    const sig = newestHoldingsSource();
+    const alerts = (Array.isArray(sig?.holdings) ? sig.holdings : []).filter((h) => h && (h.signal === "sell" || h.signal === "trim"));
+    const report = picksDocs[0];
+    const nPicks = Array.isArray(report?.picks) ? report.picks.length : 0;
     $("#kpis").innerHTML = [
-      kpi("Portfolio value", money(p.total), p.rows.filter((r) => r.value > 0).length + " positions"),
+      kpi("Portfolio value", money(p.total), held.length + " positions"),
       kpi("Total gain", money(p.gain), p.basis ? pct((p.gain / p.basis) * 100) + " on cost" : "Add avg cost to track", p.gain >= 0 ? "pos" : "neg"),
-      kpi("Left this month", money(b.left), "of " + money(b.inc) + " take-home", b.left >= 0 ? "pos" : "neg"),
-      kpi("Savings rate", b.savingsRate === null ? "—" : b.savingsRate.toFixed(0) + "%", "Target 20% or more", b.savingsRate !== null && b.savingsRate >= 20 ? "pos" : ""),
-      kpi("Emergency fund", b.efMonths === null ? "—" : b.efMonths.toFixed(1) + " mo", "of essential costs; aim for 3–6", b.efMonths !== null && b.efMonths >= 3 ? "pos" : b.efMonths !== null ? "neg" : ""),
+      kpi("Today", hasDay ? money(dayMove) : "—", hasDay ? "from live prices" : "Live prices arrive with the next check", hasDay ? (dayMove >= 0 ? "pos" : "neg") : ""),
+      kpi("Buy ideas", report ? String(nPicks) : "—", report ? sessionLabel(report) + " report, " + esc(report.date) : "No report yet", nPicks ? "pos" : ""),
+      kpi("Sell alerts", String(alerts.length), alerts.length ? alerts.map((h) => esc(h.ticker)).join(", ") : "Nothing to sell right now", alerts.length ? "neg" : "pos"),
     ].join("");
 
     const sorted = [...p.rows].sort((a, c) => c.score.ratio - a.score.ratio);
@@ -562,25 +464,16 @@ input[type="number"] { font-family: var(--font-data); }
       ? `<div class="factors">${sorted.map((r) => `<div class="factor"><span><span class="ticker">${esc(r.s.ticker)}</span> <span class="sub">${esc(r.s.name || "")}</span></span><span class="pill ${r.score.verdict.cls}">${r.score.verdict.label}</span></div>`).join("")}</div>`
       : `<p class="empty">No stocks yet. Add one in the Stocks tab.</p>`;
 
-    $("#ovMonthLabel").textContent = new Date(thisMonth() + "-02").toLocaleString("en-US", { month: "long", year: "numeric" });
-    $("#ovBudget").innerHTML = catBarsHTML(b, 5);
+    const picks = Array.isArray(report?.picks) ? report.picks.slice(0, 3) : [];
+    $("#ovPicksMeta").textContent = report ? sessionLabel(report) + " report, " + report.date : "From the latest research report";
+    $("#ovPicks").innerHTML = picks.length
+      ? `<div class="factors">${picks.map((pk, i) => { const v = scoreStock(pickToStock(pk)).verdict; return `<div class="factor"><span><span class="rank">#${i + 1}</span> <span class="ticker">${esc(pk.ticker)}</span> <span class="sub num">${money(num(pk.price), 2)}</span></span><span class="pill ${v.cls}">${v.label}</span>${pk.thesis ? `<span class="fnote">${esc(String(pk.thesis).split(/(?<=\.)\s/)[0])}</span>` : ""}</div>`; }).join("")}</div>`
+      : `<p class="empty">${report ? "No stocks met the bar in the latest report." : "The first research report will list the best stocks to buy here."}</p>`;
 
-    const held = p.rows.filter((r) => r.value > 0).sort((a, c) => c.value - a.value);
     $("#alloc").innerHTML = held.length
       ? `<div class="alloc">${held.map((r, i) => `<i style="width:${r.weight}%;background:${PALETTE[i % PALETTE.length]}" title="${esc(r.s.ticker)}"></i>`).join("")}</div>
          <div class="legend">${held.map((r, i) => `<span><b style="background:${PALETTE[i % PALETTE.length]}"></b><span class="ticker">${esc(r.s.ticker)}</span> <span class="num">${r.weight.toFixed(1)}%</span>${r.weight > 25 ? ` <span class="pill warn">Concentrated</span>` : ""}</span>`).join("")}</div>`
       : `<p class="empty">Allocation appears once you own shares.</p>`;
-  }
-
-  function catBarsHTML(b, limit = Infinity) {
-    const cats = state.categories.filter((c) => c.kind !== "save" || b.byCat[c.id]).map((c) => ({ c, spent: b.byCat[c.id] || 0 }));
-    cats.sort((a, d) => d.spent / (d.c.limit || 1) - a.spent / (a.c.limit || 1));
-    if (!cats.length) return `<p class="empty">No categories yet.</p>`;
-    return cats.slice(0, limit).map(({ c, spent }) => {
-      const lim = +c.limit || 0, r = lim ? spent / lim : spent > 0 ? 2 : 0;
-      const col = c.kind === "save" ? "var(--good)" : r > 1 ? "var(--bad)" : r > 0.85 ? "var(--warn)" : "var(--accent)";
-      return `<div class="catrow"><span>${esc(c.name)}</span><div class="track"><i style="width:${Math.min(100, r * 100)}%;background:${col}"></i></div><span class="num" style="font-size:13px">${money(spent)} / ${money(lim)}${r > 1 && c.kind !== "save" ? ` <span class="pill bad">Over</span>` : ""}</span></div>`;
-    }).join("");
   }
 
   function renderStocks() {
@@ -618,43 +511,9 @@ input[type="number"] { font-family: var(--font-data); }
       </div>`;
   }
 
-  function renderBudget() {
-    const b = budget();
-    $("#monthPick").value = viewMonth;
-    $("#budgetKpis").innerHTML = [
-      kpi("Take-home pay", money(b.inc), "per month"),
-      kpi("Spent", money(b.spending), "needs + wants this month"),
-      kpi("Saved & invested", money(b.actual.save), b.savingsRate === null ? "Set your pay below" : b.savingsRate.toFixed(0) + "% of pay", b.actual.save > 0 ? "pos" : ""),
-      kpi("Left over", money(b.left), b.left >= 0 ? "Unassigned money" : "You spent more than you earned", b.left >= 0 ? "pos" : "neg"),
-    ].join("");
-    $("#catBars").innerHTML = catBarsHTML(b);
-    const inc = b.inc || 1;
-    const cell = (k, label, target) => {
-      const v = (b.plan[k] / inc) * 100;
-      const ok = k === "save" ? v >= target : v <= target;
-      return `<div><div class="k">${label}</div><div class="v ${b.inc ? (ok ? "pos" : "neg") : ""}">${b.inc ? v.toFixed(0) + "%" : "—"}</div><div class="t">${money(b.plan[k])} planned · target ${k === "save" ? "≥" : "≤"}${target}%</div></div>`;
-    };
-    $("#ruleBox").innerHTML = `<div class="rule">${cell("need", "Needs", 50)}${cell("want", "Wants", 30)}${cell("save", "Saving", 20)}</div>`;
-    $("#set-income").value = state.settings.income ?? "";
-    $("#set-efund").value = state.settings.efund ?? "";
-
-    const catName = (id) => state.categories.find((c) => c.id === id)?.name || "Uncategorized";
-    const prevCat = $("#tx-cat").value;
-    $("#tx-cat").innerHTML = state.categories.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join("");
-    if (state.categories.some((c) => c.id === prevCat)) $("#tx-cat").value = prevCat;
-    if (!$("#tx-date").value) $("#tx-date").value = today();
-    const tx = [...b.tx].sort((a, c) => c.date.localeCompare(a.date));
-    $("#txCount").textContent = tx.length + " in " + new Date(viewMonth + "-02").toLocaleString("en-US", { month: "short", year: "numeric" });
-    $("#txRows").innerHTML = tx.length
-      ? tx.map((t) => `<tr><td class="mono">${esc(t.date.slice(5))}</td><td>${esc(t.desc)}</td><td>${esc(catName(t.cat))}</td><td class="n">${money(+t.amount, 2)}</td><td><button class="btn ghost small" data-deltx="${t.id}" aria-label="Delete">✕</button></td></tr>`).join("")
-      : `<tr><td colspan="5" class="empty">No transactions this month.</td></tr>`;
-    const kindLabel = { need: "Need", want: "Want", save: "Saving" };
-    $("#catRows").innerHTML = state.categories.map((c) => `<tr><td>${esc(c.name)}</td><td><span class="pill ${c.kind === "save" ? "good" : c.kind === "want" ? "warn" : "neutral"}">${kindLabel[c.kind]}</span></td><td class="n">${money(+c.limit)}</td><td><button class="btn ghost small" data-delcat="${c.id}" aria-label="Delete">✕</button></td></tr>`).join("");
-  }
-
   function renderAll() {
     $("#exampleBanner").hidden = !state.example;
-    renderOverview(); renderStocks(); renderBudget();
+    renderOverview(); renderStocks();
     renderPicks();
   }
 
@@ -668,9 +527,9 @@ input[type="number"] { font-family: var(--font-data); }
   document.querySelectorAll("nav.tabs button").forEach((b) => b.addEventListener("click", () => showView(b.dataset.view)));
   document.addEventListener("click", (e) => { const g = e.target.closest("[data-goto]"); if (g) showView(g.dataset.goto); });
   const hash = location.hash.slice(1);
-  let startTab = ["overview", "picks", "stocks", "budget", "ai"].includes(hash) ? hash : null;
+  let startTab = ["overview", "picks", "stocks", "ai"].includes(hash) ? hash : null;
   if (!startTab) { try { startTab = localStorage.getItem("ledgerline-tab"); } catch (e) {} }
-  if (["overview", "picks", "stocks", "budget", "ai"].includes(startTab)) showView(startTab);
+  if (["overview", "picks", "stocks", "ai"].includes(startTab)) showView(startTab);
 
   $("#clearExamples").addEventListener("click", () => { state = blankState(); selectedId = null; commit(); });
 
@@ -712,39 +571,13 @@ input[type="number"] { font-family: var(--font-data); }
     if (b.dataset.act === "ask") { showView("ai"); ask(`Give me a buy / hold / sell style analysis of ${s.ticker} using my numbers. What are the main strengths and risks, and what should I check before buying more?`); }
   });
 
-  // ---------- budget interactions ----------
-  $("#monthPick").addEventListener("change", (e) => { viewMonth = e.target.value || thisMonth(); renderBudget(); });
-  $("#settingsForm").addEventListener("submit", (e) => { e.preventDefault(); state.settings = { income: num($("#set-income").value) ?? 0, efund: num($("#set-efund").value) ?? 0 }; commit(); });
-  $("#txForm").addEventListener("submit", (e) => {
-    e.preventDefault();
-    const amount = num($("#tx-amt").value); if (amount === null) return;
-    const date = $("#tx-date").value || today();
-    state.txns.push({ id: uid(), date, desc: $("#tx-desc").value.trim(), cat: $("#tx-cat").value, amount });
-    viewMonth = date.slice(0, 7);
-    $("#tx-desc").value = ""; $("#tx-amt").value = "";
-    commit(); $("#tx-desc").focus();
-  });
-  $("#txRows").addEventListener("click", (e) => { const b = e.target.closest("[data-deltx]"); if (b) { state.txns = state.txns.filter((t) => t.id !== b.dataset.deltx); commit(); } });
-  $("#catForm").addEventListener("submit", (e) => {
-    e.preventDefault();
-    state.categories.push({ id: "c" + uid(), name: $("#cat-name").value.trim(), limit: num($("#cat-limit").value) ?? 0, kind: $("#cat-kind").value });
-    $("#cat-name").value = ""; $("#cat-limit").value = ""; commit();
-  });
-  $("#catRows").addEventListener("click", (e) => {
-    const b = e.target.closest("[data-delcat]"); if (!b) return;
-    const id = b.dataset.delcat;
-    if (state.txns.some((t) => t.cat === id) && b.dataset.armed !== "1") { b.dataset.armed = "1"; b.textContent = "Has transactions, tap again"; return; }
-    state.categories = state.categories.filter((c) => c.id !== id); state.txns = state.txns.filter((t) => t.cat !== id); commit();
-  });
-
   // ---------- AI assistant ----------
   let sampleFn = null;
   const turns = [];
   let busy = null;
 
   function snapshotForAI() {
-    const p = portfolio(), b = budget(thisMonth());
-    const catName = (id) => state.categories.find((c) => c.id === id)?.name || "Uncategorized";
+    const p = portfolio();
     return {
       today: today(),
       dataIsExample: state.example,
@@ -761,29 +594,23 @@ input[type="number"] { font-family: var(--font-data); }
           scoreFactors: r.score.factors.map((f) => `${f.name} ${f.value}: ${f.pts} pts`),
         })),
       },
-      budget: {
-        month: thisMonth(), monthlyTakeHome: b.inc, emergencyFund: b.efund, emergencyFundMonthsOfNeeds: b.efMonths === null ? null : +b.efMonths.toFixed(1),
-        planned: b.plan, actualThisMonth: b.actual, leftThisMonth: +b.left.toFixed(2), savingsRatePct: b.savingsRate === null ? null : +b.savingsRate.toFixed(1),
-        categories: state.categories.map((c) => ({ name: c.name, type: c.kind, monthlyLimit: c.limit, spentThisMonth: +(b.byCat[c.id] || 0).toFixed(2) })),
-        recentTransactions: [...state.txns].sort((a, c) => c.date.localeCompare(a.date)).slice(0, 60).map((t) => ({ date: t.date, desc: t.desc, category: catName(t.cat), amount: t.amount })),
-      },
     };
   }
 
   function instructions() {
-    return `You are Ledgerline, a personal finance assistant inside a stock-analysis and budgeting app. The user's current data is below as JSON (it is their own entry, not live market data; prices may be stale).
+    return `You are Ledgerline, an AI stock market analyst. Your job is to help the user find the best stocks to buy and spot the ones to sell. The user's data is below as JSON: their holdings and watchlist (live prices and trends where "live" is present, otherwise their own entries, which may be stale), plus the latest research reports and hourly checks.
 
 How the app scores stocks: points for valuation (PEG = P/E ÷ (EPS growth + dividend yield)), earnings growth, revenue growth, net margin, debt/equity, and dividend yield. ≥50% of max points = "Buy candidate", 0 or more = "Hold / watch", net negative = "Avoid for now".
 
 Guidelines:
 - Ground every answer in the user's numbers; cite them (tickers, dollars, percentages).
 - Be direct and practical. Give a clear lean (e.g. "MSFT looks strongest on these numbers") and explain why, then name the key risks.
-- Consider the whole picture: concentration, emergency fund, savings rate, and whether they can afford to invest more before suggesting buying.
+- Consider the whole portfolio: concentration in one stock or sector, gains and losses vs. their cost, trend (50/200-day averages, RSI), and the latest sell signals.
 - If data is missing or looks stale, say what to check.
-- You can't see live prices or news; say so when it matters.
+- You can't browse news yourself; use the research reports for news, and say when data is missing or old.
 - Keep answers short: a few short paragraphs or bullets. Use **bold** sparingly. No tables.
 - End stock-buying recommendations with a one-line reminder that this is educational, not personalized financial advice.
-${state.example ? "- NOTE: the user is still viewing the app's EXAMPLE data. Mention this briefly if they ask about 'my' stocks or budget.\n" : ""}
+${state.example ? "- NOTE: the user is still viewing the app's EXAMPLE data. Mention this briefly if they ask about 'my' stocks.\n" : ""}
 USER DATA:
 ${JSON.stringify(snapshotForAI())}`;
   }
@@ -821,7 +648,7 @@ ${JSON.stringify(snapshotForAI())}`;
     turns.push({ role: "user", content: q });
     const out = addMsg("ai", "Thinking…");
     if (!sampleFn) {
-      out.innerHTML = renderMd("The AI assistant works when this app is opened in Claude. Your stock scores and budget still work everywhere.");
+      out.innerHTML = renderMd("The AI assistant works when this app is opened in Claude. Your stock scores still work everywhere.");
       turns.pop();
       return;
     }
@@ -932,7 +759,7 @@ ${JSON.stringify(snapshotForAI())}`;
       commit();
       a.textContent = ex ? "Updated" : "Added to watchlist";
     }
-    if (q) { const pk = d.picks[+q.dataset.askpick]; showView("ai"); ask(`Today's daily picks include ${pk.ticker}. Given my portfolio and budget, should I buy it, and how much would be sensible?`); }
+    if (q) { const pk = d.picks[+q.dataset.askpick]; showView("ai"); ask(`Today's daily picks include ${pk.ticker}. Given my portfolio, should I buy it, and what would make it a bad idea?`); }
   });
 
   // Sell / trim / watch / hold signals for the stocks the user owns
@@ -985,7 +812,7 @@ ${JSON.stringify(snapshotForAI())}`;
     if (!db) { picksStatus = "nodb"; renderPicks(); return; }
     db.collection("picks").orderBy("generatedAt", "desc").limit(40).onSnapshot((snap) => {
       picksDocs = snap.docs.map((x) => x.data()).filter((x) => x && x.date);
-      picksStatus = "ready"; renderPicks();
+      picksStatus = "ready"; renderAll();
     }, () => { picksStatus = "ready"; renderPicks(); });
     db.collection("quotes").limit(500).onSnapshot((snap) => {
       const m = {};
@@ -994,7 +821,7 @@ ${JSON.stringify(snapshotForAI())}`;
     }, () => {});
     db.collection("checks").orderBy("generatedAt", "desc").limit(1).onSnapshot((snap) => {
       latestCheck = snap.docs.map((x) => x.data()).find((x) => x && x.generatedAt) || null;
-      renderCheck(); renderPicks();
+      renderAll();
     }, () => {});
   }
 
